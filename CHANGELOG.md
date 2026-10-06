@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2 — 2026-10-06
+
+- **Natural-language voice** — Nexus now understands plain English, not just fixed keywords. Quick
+  commands ("open Jarvis", "stop all") still run instantly and offline; anything else is handed to
+  a local Claude brain that answers questions about how the fleet is doing and can act on it
+  (including bringing every agent up at once). Requires the `claude` CLI; on by default when present.
+
 ## 1.1 — 2026-10-06
 
 - **Operations Center** dashboard — a flagship spatial command-centre view (now the default):

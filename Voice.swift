@@ -12,6 +12,10 @@ import AppKit
 import AVFoundation
 import Speech
 
+// Lightweight voice tracing, on only when NEXUS_VOICE_DEBUG is set in the environment.
+let voiceDebug = ProcessInfo.processInfo.environment["NEXUS_VOICE_DEBUG"] != nil
+@inline(__always) func vlog(_ s: @autoclosure () -> String) { if voiceDebug { NSLog("Nexus/voice: " + s()) } }
+
 // MARK: - "Sounds like" helpers (trimmed from Jarvis's People)
 
 enum Sound {
@@ -95,6 +99,19 @@ final class Ears {
     private var finalizing = false
     private(set) var running = false
 
+    // Mic-level tracing: log a running peak at most twice a second so the console shows whether
+    // the tap is actually receiving audio (non-zero) or silence (mic denied / wrong device).
+    private var levelPeak: Float = 0
+    private var levelLogged = Date()
+    private func logLevel(_ rms: Float) {
+        guard voiceDebug else { return }
+        levelPeak = max(levelPeak, rms)
+        if Date().timeIntervalSince(levelLogged) >= 0.5 {
+            vlog(String(format: "mic peak %.4f", levelPeak))
+            levelPeak = 0; levelLogged = Date()
+        }
+    }
+
     init() {
         NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
                                                queue: .main) { [weak self] _ in
@@ -143,6 +160,7 @@ final class Ears {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.channelCount > 0, format.sampleRate > 0 else { return }
+        vlog("start: input format \(format.sampleRate)Hz ch\(format.channelCount)")
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buf, _ in
             if self?.finalizing == false { self?.request?.append(buf) }
@@ -150,11 +168,13 @@ final class Ears {
             var sum: Float = 0
             for i in 0..<Int(buf.frameLength) { sum += ch[i] * ch[i] }
             let rms = sqrt(sum / Float(buf.frameLength))
+            self?.logLevel(rms)
             DispatchQueue.main.async { self?.onLevel?(rms) }
         }
         engine.prepare()
         do { try engine.start() } catch { NSLog("Nexus: audio engine failed: \(error)"); return }
         running = true
+        vlog("start: engine running")
         beginTask(.none)
     }
 
@@ -181,6 +201,7 @@ final class Ears {
         req.contextualStrings = vocabulary
         if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
         request = req; capture = mode; command = ""; finalizing = false
+        vlog("beginTask(\(mode)) onDevice=\(recognizer.supportsOnDeviceRecognition) available=\(recognizer.isAvailable)")
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             DispatchQueue.main.async { self?.handle(req, result, error) }
         }
@@ -194,8 +215,10 @@ final class Ears {
     private func handle(_ req: SFSpeechAudioBufferRecognitionRequest,
                         _ result: SFSpeechRecognitionResult?, _ error: Error?) {
         guard req === request, running else { return }
+        if let error { vlog("recognition error (\(capture)): \(error.localizedDescription)") }
         if let result {
             let text = result.bestTranscription.formattedString
+            vlog("result(\(capture)) final=\(result.isFinal) text=\"\(text)\"")
             switch capture {
             case .none:
                 if let rest = Ears.afterWakeWord(text) { capture = .afterWake; onWake?(); update(rest) }
@@ -273,10 +296,11 @@ final class Mouth: NSObject, AVSpeechSynthesizerDelegate {
 // MARK: - Commands → fleet actions
 
 enum Commands {
-    /// Runs a spoken command and returns a short line for Nexus to say back.
-    static func run(_ text: String, showDashboard: (() -> Void)?) -> String {
+    /// Runs a spoken command and returns a short line for Nexus to say back, or nil if the words
+    /// don't map to any fleet command (so the caller can hand them to the Brain instead).
+    static func run(_ text: String, showDashboard: (() -> Void)?) -> String? {
         let t = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return "" }
+        guard !t.isEmpty else { return nil }
 
         Fleet.shared.discover(); Fleet.shared.refresh()
 
@@ -313,7 +337,8 @@ enum Commands {
 
         // Single-agent operations.
         guard let app = bestApp(for: t) else {
-            return "I didn't catch which agent you meant. Try, Nexus, open Jarvis."
+            // A verb but no recognizable agent, or no verb at all: let the Brain interpret it.
+            return nil
         }
         if restartV { Actions.stop(app); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { Actions.open(app) }; return "Restarting \(app.name)." }
         if stopV    { Actions.stop(app); return "Stopping \(app.name)." }
@@ -379,12 +404,25 @@ enum Commands {
 final class Voice: NSObject {
     let ears = Ears()
     let mouth = Mouth()
+    let brain = Brain()
     var showDashboard: (() -> Void)?
     var onState: ((String) -> Void)?     // "idle" | "listening" | "working" | "speaking" | "off"
     var onLevel: ((Float) -> Void)?      // mic loudness, for the orb
     var onCaption: ((String) -> Void)?   // text to show under the orb
 
     private var wired = false
+    private var endConversation = false  // user said "that's all" — skip the next follow-up
+
+    /// Single source of truth for the orb/menu/icon, exactly like Jarvis's `mode`. Everything that
+    /// changes what Nexus is doing sets this; the orb and status bar are pure reflections of it.
+    private(set) var mode = "off" {
+        didSet { if mode != oldValue { onState?(mode) } }
+    }
+
+    /// Said after a reply (conversation mode) to close the follow-up window without a wake word.
+    private static let endPhrases = ["that's all", "thats all", "that's it", "thats it", "that will be all",
+                                     "nothing", "no thanks", "no thank you", "stop listening", "we're done",
+                                     "were done", "goodbye", "bye", "dismiss"]
 
     override init() {
         super.init()
@@ -395,58 +433,184 @@ final class Voice: NSObject {
         guard !wired else { return }; wired = true
         ears.onWake = { [weak self] in
             NSSound(named: "Tink")?.play()
-            self?.onState?("listening")
+            self?.mode = "listening"
             self?.onCaption?("Listening…")
         }
         ears.onPartial = { [weak self] text in if !text.isEmpty { self?.onCaption?(text) } }
         ears.onLevel = { [weak self] level in self?.onLevel?(level) }
-        ears.onGiveUp = { [weak self] in self?.onState?("idle"); self?.onCaption?("") }
+        ears.onGiveUp = { [weak self] in self?.mode = "idle"; self?.onCaption?("") }
         ears.onCommand = { [weak self] cmd in self?.handle(cmd) }
         mouth.onDone = { [weak self] in
             guard let self else { return }
-            self.onState?("idle")
             self.onCaption?("")
-            if Settings.voiceEnabled { self.ears.start() }   // Ears stopped itself while we spoke
+            guard Settings.voiceEnabled else { return }
+            // Conversation mode: after replying, listen for a follow-up without the wake word.
+            if Settings.conversation && !self.endConversation {
+                self.followUp()
+            } else {
+                self.endConversation = false
+                self.resumeListening()   // back to quiet wake-word listening
+            }
         }
     }
+
+    /// Orb click / "Listen Now": interrupts whatever is happening — a faithful port of Jarvis's
+    /// `toggle()`. Speaking/working → stop and go quiet; listening → cancel to idle; idle → listen.
+    func toggle() {
+        switch mode {
+        case "speaking", "working":
+            endConversation = true       // an interrupt must not re-open a follow-up window
+            let wasWorking = mode == "working"
+            brain.cancel()               // drop any in-flight Claude turn (clears its callback first)
+            mouth.stop()                 // if speaking, fires onDone → resumeListening
+            onCaption?("")
+            if wasWorking { resumeListening() }
+            endConversation = false
+        case "listening":
+            ears.reset(); mode = "idle"; onCaption?("")
+        default:
+            guard Settings.voiceEnabled else { return }
+            guard permitted else { Voice.openPrivacySettings(); return }
+            ears.listenNow()
+            if ears.running {
+                NSSound(named: "Tink")?.play()
+                mode = "listening"
+                onCaption?("Listening…")
+            }
+        }
+    }
+
+    /// Returns to quiet wake-word listening, retrying if the audio engine is still mid-route-switch
+    /// (same resilience as Jarvis).
+    func resumeListening(retries: Int = 3) {
+        guard Settings.voiceEnabled, permitted else { mode = "off"; return }
+        mode = "idle"
+        ears.start()
+        if !ears.running && retries > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, self.mode == "idle" else { return }
+                self.resumeListening(retries: retries - 1)
+            }
+        }
+    }
+
+    /// Keep listening briefly for a follow-up command, no wake word needed (Jarvis-style).
+    private func followUp() {
+        mode = "listening"
+        // Brief pause so the tail of our own speech isn't picked up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.mode == "listening", Settings.voiceEnabled else { return }
+            self.onCaption?("Listening…")
+            self.ears.listenNow(timeout: 8)
+            if !self.ears.running { self.resumeListening() }
+        }
+    }
+
+    /// False once we've seen macOS deny mic or speech, so the menu/status can explain it.
+    private(set) var permitted = true
 
     func start() {
         guard Settings.voiceEnabled else { return }
+        vlog("start: requesting auth (speech status \(SFSpeechRecognizer.authorizationStatus().rawValue))")
         requestAuth { [weak self] ok in
-            guard ok, let self else { return }
+            guard let self else { return }
+            self.permitted = ok
+            vlog("start: auth granted=\(ok)")
+            guard ok else {
+                self.mode = "off"
+                self.onCaption?("Allow Microphone and Speech Recognition in System Settings → Privacy & Security.")
+                NSLog("Nexus: voice needs microphone + speech permission")
+                return
+            }
             self.ears.start()
-            self.onState?("idle")
+            if Settings.brain { self.brain.warmUp() }   // spawn Claude so the first question is fast
+            if self.ears.available {
+                self.mode = "idle"
+            } else {
+                self.mode = "off"
+                self.onCaption?("No on-device speech model for this language.")
+            }
         }
     }
 
-    func stop() { ears.stop(); mouth.stop(); onState?("off"); onCaption?("") }
+    /// Opens the right System Settings pane so the user can grant mic/speech access.
+    static func openPrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func stop() { ears.stop(); mouth.stop(); brain.cancel(); mode = "off"; onCaption?("") }
 
     func reload() { if Settings.voiceEnabled { ears.reload() } }
 
     var status: String {
         if !Settings.voiceEnabled { return "Voice control is off" }
+        if !permitted { return "Voice: needs mic & speech permission" }
         if !ears.available { return "Voice: no speech model" }
-        return "Listening for " + Settings.wakeNames.map { "“\($0)”" }.joined(separator: " or ")
+        let base = "Listening for " + Settings.wakeNames.map { "“\($0)”" }.joined(separator: " or ")
+        return Settings.conversation ? base + " · conversation on" : base
     }
 
     private func handle(_ cmd: String) {
-        onState?("working")
-        let reply = Commands.run(cmd, showDashboard: showDashboard)
-        if reply.isEmpty {
-            onState?("idle"); onCaption?("")
-            if Settings.voiceEnabled { ears.start() }
+        let plain = cmd.lowercased().trimmingCharacters(in: CharacterSet.whitespaces.union(.punctuationCharacters))
+        // "That's all" closes the conversation without running a command.
+        if Voice.endPhrases.contains(where: { plain == $0 || plain.hasSuffix(" " + $0) }) {
+            endConversation = true
+            mode = "speaking"; onCaption?("Okay."); mouth.say("Okay.")
             return
         }
-        onState?("speaking")
-        onCaption?(reply)
-        mouth.say(reply)
+        mode = "working"
+        // Fast path: the keyword parser handles the obvious fleet commands instantly and offline.
+        if let reply = Commands.run(cmd, showDashboard: showDashboard) {
+            mode = "speaking"; onCaption?(reply); mouth.say(reply)
+            return
+        }
+        // Natural phrasing or a question the parser couldn't map: let the Brain (Claude) handle it.
+        if Settings.brain && Brain.available {
+            askBrain(cmd)
+        } else {
+            // No brain available: stay in the conversation if we can, otherwise go quiet.
+            onCaption?("")
+            if Settings.voiceEnabled && Settings.conversation && !endConversation { followUp() }
+            else { resumeListening() }
+        }
+    }
+
+    /// Hand a request the keyword parser didn't understand to Claude, then speak the reply and run
+    /// any [[do: …]] fleet actions it asked for.
+    private func askBrain(_ cmd: String) {
+        onCaption?("Thinking…")
+        var buffer = ""
+        brain.ask(cmd, onText: { buffer += $0 }, done: { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                let (spoken, commands) = Brain.directives(in: buffer)
+                for c in commands { _ = Commands.run(c, showDashboard: self.showDashboard) }   // execute, silently
+                let line = spoken.isEmpty ? (commands.isEmpty ? "" : "Done.") : spoken
+                if line.isEmpty {
+                    self.onCaption?("")
+                    if Settings.conversation && !self.endConversation { self.followUp() } else { self.resumeListening() }
+                } else {
+                    self.mode = "speaking"; self.onCaption?(line); self.mouth.say(line)
+                }
+            case .failure(let error):
+                let msg = error.localizedDescription
+                NSLog("Nexus: brain failed: \(msg)")
+                self.mode = "speaking"
+                let line = "Sorry, I couldn't work that out."
+                self.onCaption?(line); self.mouth.say(line)
+            }
+        })
     }
 
     private func requestAuth(_ done: @escaping (Bool) -> Void) {
-        SFSpeechRecognizer.requestAuthorization { auth in
-            guard auth == .authorized else { DispatchQueue.main.async { done(false) }; return }
-            AVCaptureDevice.requestAccess(for: .audio) { mic in
-                DispatchQueue.main.async { done(mic) }
+        // Microphone first, then speech — the same order Jarvis uses, which prompts reliably.
+        AVCaptureDevice.requestAccess(for: .audio) { mic in
+            guard mic else { DispatchQueue.main.async { done(false) }; return }
+            SFSpeechRecognizer.requestAuthorization { auth in
+                DispatchQueue.main.async { done(auth == .authorized) }
             }
         }
     }

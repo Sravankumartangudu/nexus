@@ -53,6 +53,12 @@ enum Settings {
         }
     }
 
+    /// After Nexus replies, keep listening for a follow-up command without the wake word.
+    static var conversation: Bool {
+        get { d.object(forKey: "conversation") as? Bool ?? true }
+        set { d.set(newValue, forKey: "conversation") }
+    }
+
     /// Speech-recognition locale (e.g. "en-US"); nil means auto-detect.
     static var speechLocale: String? {
         get { d.string(forKey: "speechLocale") }
@@ -63,6 +69,24 @@ enum Settings {
     static var voice: String? {
         get { d.string(forKey: "voiceId") }
         set { d.set(newValue, forKey: "voiceId") }
+    }
+
+    /// Use the local Claude CLI to understand natural phrasing the keyword parser can't (on by default).
+    static var brain: Bool {
+        get { d.object(forKey: "brain") as? Bool ?? true }
+        set { d.set(newValue, forKey: "brain") }
+    }
+
+    /// Model for the brain; small and fast by default.
+    static var brainModel: String {
+        get { d.string(forKey: "brainModel") ?? "haiku" }
+        set { d.set(newValue, forKey: "brainModel") }
+    }
+
+    /// Resumed Claude conversation id, so the brain keeps context across questions.
+    static var brainSessionId: String? {
+        get { d.string(forKey: "brainSessionId") }
+        set { d.set(newValue, forKey: "brainSessionId") }
     }
 
     // MARK: Orb
@@ -520,10 +544,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Click the orb to listen immediately, without the wake word.
     func listenNow() {
-        if !Settings.voiceEnabled { Settings.voiceEnabled = true; applyVoiceSetting() }
-        voice.onState?("listening")
-        voice.onCaption?("Listening…")
-        voice.ears.listenNow()
+        // First click with voice off: enable it (it starts listening for the wake word).
+        if !Settings.voiceEnabled { Settings.voiceEnabled = true; applyVoiceSetting(); return }
+        // Otherwise clicking the orb is a straight toggle, exactly like Jarvis.
+        voice.toggle()
     }
 
     static func jsString(_ s: String) -> String {
@@ -607,11 +631,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         // Voice control — Nexus listens for its wake word and runs spoken fleet commands.
-        let voiceStatus = NSMenuItem(title: voice.status, action: nil, keyEquivalent: "")
-        voiceStatus.isEnabled = false
-        menu.addItem(voiceStatus)
+        if Settings.voiceEnabled && !voice.permitted {
+            // Make the status actionable: click it to jump to the right System Settings pane.
+            add(menu, "⚠︎ Grant Microphone & Speech…", #selector(openVoicePrivacy))
+        } else {
+            let voiceStatus = NSMenuItem(title: voice.status, action: nil, keyEquivalent: "")
+            voiceStatus.isEnabled = false
+            menu.addItem(voiceStatus)
+        }
         let voiceToggle = add(menu, "Voice Control", #selector(toggleVoice))
         voiceToggle.state = Settings.voiceEnabled ? .on : .off
+        let convo = add(menu, "Conversation Mode (no wake word for follow-ups)", #selector(toggleConversation))
+        convo.state = Settings.conversation ? .on : .off
+        if !Settings.voiceEnabled { convo.isEnabled = false }
 
         // The floating orb — a Jarvis-style face that reacts to the voice state.
         let orbToggle = add(menu, "Show Orb", #selector(toggleOrb))
@@ -705,6 +737,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Settings.voiceEnabled.toggle()
         applyVoiceSetting()
     }
+
+    @objc func toggleConversation() { Settings.conversation.toggle() }
+
+    @objc func openVoicePrivacy() { Voice.openPrivacySettings() }
 
     @objc func toggleLogin() {
         let svc = SMAppService.mainApp

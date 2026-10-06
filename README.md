@@ -18,7 +18,11 @@ spoken command, wakes, opens, stops, or rebuilds any of them for you.
   xcode-select --install
   ```
 - **A microphone** — only if you want voice control (optional; off by default).
-- No other dependencies, no runtime, no network. Everything is local files.
+- **The `claude` CLI** — optional, only for natural-language voice. If [Claude Code](https://docs.claude.com/en/docs/claude-code)
+  is installed and on your `PATH`, Nexus uses it to understand plain-English questions and requests;
+  without it, voice still works with the built-in keyword commands.
+- No other required dependencies, no runtime. Nexus itself makes no network calls (the optional
+  `claude` brain does, when you speak to it).
 
 > Nexus runs as a background agent (`LSUIElement`) — it lives in the menu bar with **no Dock icon
 > and no main window**.
@@ -110,6 +114,12 @@ Enable **Voice Control** from the menu (or Settings). On first use macOS will as
 Speech recognition is on-device where supported; set your **Recognition accent** in Settings for
 better accuracy.
 
+**Natural language.** The commands above are matched instantly and offline. Anything phrased more
+naturally — or a *question* like *"how are the agents doing?"*, *"which ones are down?"*, *"bring
+everything online"* — is handed to a local **Claude brain** (the `claude` CLI, if installed). It
+sees a live snapshot of the fleet, answers in a sentence or two, and can act on the fleet when you
+ask. On by default when the CLI is present; it falls back to keyword commands otherwise.
+
 ### Voice orb (optional)
 
 **Show Orb** floats a Jarvis-style animated orb on screen that reflects the voice state (idle /
@@ -190,6 +200,7 @@ The beacon is self-contained and has no dependency on Nexus being installed — 
 - `main.swift` — menu bar, dashboard window, voice/orb wiring, per-app actions, refresh loop
 - `Fleet.swift` — discovery, heartbeat reading, status computation
 - `Voice.swift` — wake-word listening, command parsing, speech synthesis
+- `Brain.swift` — natural-language understanding and fleet actions via the local `claude` CLI
 - `dashboard.html` — the dashboard UI and its visualisation styles
 - `orb.html` — the floating voice orb
 - `beacon/NexusBeacon.swift`, `beacon/nexus-beacon.js` — drop-in heartbeat libraries
