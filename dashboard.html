@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexus — Mission Control</title>
+<style>
+  :root {
+    --bg0:#070a12; --bg1:#0e1322; --text:#e7ebf3; --dim:#8b93a7; --line:#262c3d;
+    --green:#2ecc71; --amber:#ffb020; --red:#ff4d5e; --blue:#4a9eff; --grey:#6b7280;
+    --floor:#1b2335; --floor2:#141a28;
+  }
+  * { box-sizing:border-box; -webkit-user-select:none; }
+  html,body { margin:0; height:100%; overflow:hidden; }
+  body {
+    background: radial-gradient(1400px 900px at 60% -10%, #16203c 0%, var(--bg0) 65%);
+    color:var(--text); font:13px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---- top bar ---- */
+  header {
+    position:fixed; inset:0 0 auto 0; height:64px; z-index:50;
+    display:flex; align-items:center; gap:13px; padding:0 18px;
+    background:linear-gradient(180deg, rgba(7,10,18,.92), rgba(7,10,18,0));
+    -webkit-app-region:drag;
+  }
+  header button, header select { -webkit-app-region:no-drag; }
+  .mark{ width:30px;height:30px;border-radius:8px;flex:none;position:relative;margin-left:4px;
+    background:linear-gradient(135deg,#1f2740,#121726);border:1px solid var(--line);}
+  .mark b{ position:absolute; width:7px;height:7px;border-radius:50%; background:var(--worst,var(--grey));
+    box-shadow:0 0 10px var(--worst,var(--grey)); }
+  .mark b:nth-child(1){left:11px;top:7px} .mark b:nth-child(2){left:6px;top:16px} .mark b:nth-child(3){left:16px;top:16px}
+  h1{font-size:16px;margin:0;letter-spacing:.3px}
+  .sub{color:var(--dim);font-size:11.5px;margin-top:1px}
+  .spacer{flex:1}
+  button{font:inherit;color:var(--text);background:rgba(27,32,48,.75);border:1px solid var(--line);
+    padding:6px 12px;border-radius:8px;cursor:pointer;transition:.12s;backdrop-filter:blur(6px)}
+  button:hover{background:#232a3d;border-color:#39415a}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:transparent}
+  button[disabled]{opacity:.5;cursor:default}
+  select{font:inherit;color:var(--text);background:rgba(27,32,48,.75);border:1px solid var(--line);
+    padding:6px 10px;border-radius:8px;cursor:pointer}
+  select:hover{border-color:#39415a}
+
+  /* ---- stage ---- */
+  #stage{ position:fixed; inset:0; perspective:1300px; }
+  .world{ position:absolute; left:50%; top:52%; transform-origin:center; will-change:transform; }
+  .node{ position:absolute; }
+
+  /* ======================= OFFICE ======================= */
+  #floor{ position:absolute; transform:translate(-50%,-50%); }
+  .tile{ position:absolute; width:64px; height:32px; margin:-16px 0 0 -32px;
+    background:linear-gradient(var(--floor),var(--floor2));
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+    box-shadow:inset 0 0 0 1px rgba(90,110,150,.07); }
+  .tile.alt{ filter:brightness(1.12) }
+  #ring{ position:absolute; width:300px;height:150px;margin:-75px 0 0 -150px; border-radius:50%;
+    background:radial-gradient(closest-side, rgba(74,158,255,.18), transparent 72%);
+    animation:ringpulse 4s ease-in-out infinite; }
+  @keyframes ringpulse{0%,100%{opacity:.5}50%{opacity:1}}
+
+  #core{ width:0;height:0; z-index:500000; }
+  .rack{ position:absolute; left:-36px; top:-150px; width:72px; height:150px; transform-style:preserve-3d; }
+  .rack .face{ position:absolute; inset:0; }
+  .rack .lt{ clip-path:polygon(0 22%,50% 0,50% 78%,0 100%); background:linear-gradient(#243055,#161d33); }
+  .rack .rt{ clip-path:polygon(50% 0,100% 22%,100% 100%,50% 78%); background:linear-gradient(#1a2440,#0e1424); }
+  .rack .top{ clip-path:polygon(0 22%,50% 0,100% 22%,50% 44%); background:#2d3a63; height:150px; }
+  .rack .leds{ position:absolute; left:8px; top:30px; width:24px; }
+  .rack .leds i{ display:block; width:16px;height:4px;margin:5px 0;border-radius:2px;background:var(--blue);
+    box-shadow:0 0 8px var(--blue); animation:blink 1.2s steps(1) infinite; opacity:.9 }
+  .rack .leds i:nth-child(2){animation-delay:.3s;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .rack .leds i:nth-child(3){animation-delay:.6s}
+  .rack .leds i:nth-child(4){animation-delay:.9s;background:var(--green);box-shadow:0 0 8px var(--green)}
+  @keyframes blink{0%,70%{opacity:1}71%,100%{opacity:.25}}
+  #core .glow{ position:absolute; left:-90px;top:-150px;width:180px;height:180px;border-radius:50%;
+    background:radial-gradient(closest-side, rgba(74,158,255,.35), transparent 70%);
+    filter:blur(6px); animation:ringpulse 3s ease-in-out infinite; }
+  #core .label{ position:absolute; left:-40px;top:-182px; width:80px; text-align:center;
+    font-size:10px; letter-spacing:3px; color:#bfe3ff; text-shadow:0 0 10px rgba(74,158,255,.8); }
+
+  #cafe{ z-index:1; }
+  #cafe .pad{ position:absolute; left:-70px; top:-35px; width:140px; height:70px;
+    background:radial-gradient(closest-side, rgba(255,176,32,.08), transparent 75%);
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); outline:1px dashed rgba(255,176,32,.25); }
+  .cafetable{ position:absolute;width:34px;height:17px;margin:-13px 0 0 -17px;border-radius:50%;
+    background:linear-gradient(#333c54,#1c2436); box-shadow:0 6px 10px rgba(0,0,0,.4); }
+  .cafetable::after{ content:"☕"; position:absolute; left:50%;top:-11px;transform:translateX(-50%); font-size:11px }
+  #cafe .sign{ position:absolute; left:-34px; top:-66px; width:68px;text-align:center;font-size:9px;
+    letter-spacing:2px;color:#ffd089; text-shadow:0 0 8px rgba(255,176,32,.5) }
+
+  .cube{ z-index:10; cursor:pointer; }
+  .cube .pad{ position:absolute; left:-46px;top:-26px;width:92px;height:52px; background:rgba(74,158,255,.03);
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); outline:1px solid rgba(90,110,150,.08); }
+  .cube .wall{ position:absolute; width:65px;height:30px; }
+  .cube .wall.back{ left:-32px;top:-42px; clip-path:polygon(0 50%,50% 25%,50% 75%,0 100%); background:linear-gradient(#2a3350,#1b2238); }
+  .cube .wall.side{ left:1px;top:-42px; clip-path:polygon(50% 25%,100% 50%,100% 100%,50% 75%); background:linear-gradient(#1d2540,#121a2e); }
+  .cube .desk{ position:absolute; left:-30px;top:-14px; width:60px;height:30px;
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); background:linear-gradient(#5a4a3a,#2e261d); box-shadow:0 7px 9px rgba(0,0,0,.45); }
+  .cube .mon{ position:absolute; left:-15px; top:-50px; width:30px; }
+  .cube .screen{ width:30px;height:20px;border-radius:3px; background:#0a0f1b; border:1.5px solid #30405f; overflow:hidden; position:relative;
+    box-shadow:0 0 0 1px #0a0f1b, 0 0 14px -2px var(--c); }
+  .cube .screen .glow2{ position:absolute; inset:0; background:var(--c); opacity:.16 }
+  .cube .screen .logs{ position:absolute; left:3px; right:3px; top:3px; }
+  .cube .screen .logs i{ display:block;height:2px;margin-bottom:2px;border-radius:1px;background:var(--c);opacity:.75 }
+  .cube .screen .bar{ position:absolute; left:3px;bottom:3px;height:3px;width:0;border-radius:2px;background:var(--c) }
+  .cube .stand{ width:3px;height:6px;margin:0 auto;background:#30405f }
+  .cube .foot{ width:14px;height:3px;margin:0 auto;border-radius:2px;background:#30405f }
+  .cube .chair{ position:absolute; left:-9px; top:4px; width:18px;height:12px;border-radius:4px 4px 6px 6px;
+    background:linear-gradient(#2b3450,#1a2136); box-shadow:0 4px 6px rgba(0,0,0,.4) }
+  .cube .plate{ position:absolute; left:-55px; top:16px; width:110px; text-align:center; }
+  .cube .plate b{ font-size:11px } .cube .plate span{ display:block;font-size:9.5px;color:var(--dim) }
+  .cube .led{ position:absolute; left:-3px; top:-54px; width:6px;height:6px;border-radius:50%; background:var(--c); box-shadow:0 0 10px var(--c) }
+  .cube.ok .led,.cube.running .led{ animation:none }
+  .cube.warn .led,.cube.needsBuild .led,.cube.stale .led{ animation:blink 1.4s steps(1) infinite }
+  .cube.error .led,.cube.crashed .led{ animation:blink .5s steps(1) infinite }
+  .cube:hover .pad{ outline-color:rgba(74,158,255,.5); background:rgba(74,158,255,.07) }
+  .cube.running .screen .glow2,.cube.warn .screen .glow2{opacity:.22;animation:flick 2.4s infinite}
+  .cube.error .screen .glow2{opacity:.4;animation:flick .4s infinite}
+  @keyframes flick{0%,100%{opacity:.22}48%{opacity:.3}50%{opacity:.12}}
+  .cube.crashed .screen{ box-shadow:none;border-color:#2a1620 }
+  .cube.crashed .screen .glow2{ opacity:.05 }
+  .cube.idle .screen .glow2,.cube.notBuilt .screen .glow2{ opacity:.04 }
+  .cube.needsBuild .screen{ background:repeating-linear-gradient(45deg,#1a1407,#1a1407 4px,#2a2110 4px,#2a2110 8px) }
+  .cube.notBuilt .wall,.cube.notBuilt .desk,.cube.notBuilt .mon{ opacity:.28; filter:grayscale(1) }
+  .cube.notBuilt .pad{ outline:1px dashed rgba(107,114,128,.4) }
+
+  .agent{ position:absolute; z-index:20; width:0;height:0; pointer-events:none; will-change:transform; }
+  .agent .fig{ position:absolute; left:-7px; top:-34px; width:14px; height:34px; transform-origin:bottom center; }
+  .agent .head{ position:absolute; left:2px; top:0; width:10px;height:10px;border-radius:50%; background:#f0c9a0; box-shadow:inset -2px -2px 0 rgba(0,0,0,.12) }
+  .agent .hair{ position:absolute; left:2px; top:-1px; width:10px;height:5px;border-radius:5px 5px 0 0; background:#3a2a22 }
+  .agent .torso{ position:absolute; left:1px; top:9px; width:12px;height:14px;border-radius:5px 5px 3px 3px; background:var(--c); box-shadow:inset -2px 0 0 rgba(0,0,0,.18) }
+  .agent .arm{ position:absolute; top:11px; width:3px;height:10px;border-radius:2px;background:var(--c); transform-origin:top center }
+  .agent .arm.l{ left:-1px } .agent .arm.r{ left:12px }
+  .agent .leg{ position:absolute; top:22px; width:4px;height:11px;border-radius:2px;background:#2a3350; transform-origin:top center }
+  .agent .leg.l{ left:2px } .agent .leg.r{ left:7px }
+  .agent .shadow{ position:absolute; left:-9px; top:-3px; width:18px;height:8px;border-radius:50%; background:rgba(0,0,0,.35); filter:blur(1px) }
+  .agent .bubble{ position:absolute; left:8px; top:-16px; font-size:12px; opacity:0; transition:opacity .3s }
+  .agent.show-bubble .bubble{ opacity:1; animation:bob 2s ease-in-out infinite }
+  .agent.walk .fig{ animation:bob .5s ease-in-out infinite }
+  .agent.walk .leg.l{ animation:step .5s ease-in-out infinite }
+  .agent.walk .leg.r{ animation:step .5s ease-in-out infinite reverse }
+  .agent.walk .arm.l{ animation:swing .5s ease-in-out infinite reverse }
+  .agent.walk .arm.r{ animation:swing .5s ease-in-out infinite }
+  @keyframes step{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-22deg)}}
+  @keyframes swing{0%,100%{transform:rotate(18deg)}50%{transform:rotate(-18deg)}}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+  .agent.type .arm.l{ animation:type .22s ease-in-out infinite }
+  .agent.type .arm.r{ animation:type .22s ease-in-out infinite .11s }
+  @keyframes type{0%,100%{transform:rotate(8deg)}50%{transform:rotate(-14deg)}}
+  .agent.sit .leg{ transform:rotate(78deg); top:20px }
+  .agent.sit .leg.r{ left:9px }
+  .agent.alert .arm{ transform:rotate(165deg) }
+  .agent.alert .fig{ animation:shiver .18s steps(2) infinite }
+  @keyframes shiver{0%{transform:translateX(-.6px)}100%{transform:translateX(.6px)}}
+  .agent.sleep .fig{ transform:rotate(-6deg) }
+  .agent.sleep .head{ transform:translate(2px,3px) }
+  .agent.down .fig{ transform:rotate(-82deg) translateX(-10px); opacity:.9 }
+
+  /* ======================= OPERATIONS CENTER (flagship) ======================= */
+  #opfloor{ position:absolute; transform:translate(-50%,-50%); }
+  .world.op .tile{ background:linear-gradient(#101a2e,#0a1120);
+    box-shadow:inset 0 0 0 1px rgba(74,158,255,.06); }
+  .world.op .tile.alt{ filter:brightness(1.18) }
+  #opbeams{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; z-index:40; }
+  #opbeams line{ stroke-linecap:round; }
+
+  /* central core — the "head" dispatching to every agent */
+  #opcore{ width:0;height:0; z-index:9000; }
+  #opcore .halo{ position:absolute; border-radius:50%; left:50%; top:50%;
+    transform:translate(-50%,-50%); border:1px solid rgba(74,158,255,.5); }
+  #opcore .halo.h1{ width:150px;height:75px; animation:opspin 9s linear infinite; }
+  #opcore .halo.h2{ width:220px;height:110px; border-color:rgba(120,220,255,.3); animation:opspin 14s linear infinite reverse; }
+  #opcore .halo.h3{ width:300px;height:150px; border-style:dashed; border-color:rgba(74,158,255,.18); animation:opspin 24s linear infinite; }
+  @keyframes opspin{ 0%{transform:translate(-50%,-50%) rotate(0)} 100%{transform:translate(-50%,-50%) rotate(360deg)} }
+  #opcore .dais{ position:absolute; left:-46px; top:-23px; width:92px;height:46px;
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+    background:radial-gradient(closest-side, rgba(74,158,255,.5), rgba(74,158,255,.08) 70%, transparent);
+    box-shadow:0 0 40px rgba(74,158,255,.5); }
+  #opcore .column{ position:absolute; left:-5px; top:-120px; width:10px; height:120px; border-radius:5px;
+    background:linear-gradient(180deg, rgba(207,232,255,0), rgba(120,200,255,.85)); filter:blur(.4px);
+    animation:opglow 2.6s ease-in-out infinite; }
+  #opcore .orb{ position:absolute; left:-18px; top:-138px; width:36px;height:36px;border-radius:50%;
+    background:radial-gradient(circle at 38% 34%, #e8f6ff, #4a9eff 58%, #15335e);
+    box-shadow:0 0 44px rgba(74,158,255,.9); animation:opfloat 4s ease-in-out infinite; }
+  @keyframes opglow{0%,100%{opacity:.6}50%{opacity:1}}
+  @keyframes opfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  #opcore .label{ position:absolute; left:-50px; top:-168px; width:100px; text-align:center;
+    font-size:11px; letter-spacing:5px; color:#cde9ff; text-shadow:0 0 12px rgba(74,158,255,.9); }
+
+  /* each agent — a holo pod wired back to the core */
+  .pod{ position:absolute; cursor:pointer; z-index:200; }
+  .pod .base{ position:absolute; left:-34px; top:-17px; width:68px;height:34px;
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+    background:radial-gradient(closest-side, color-mix(in srgb,var(--c) 40%,transparent), transparent 76%);
+    outline:1px solid color-mix(in srgb,var(--c) 24%,transparent); }
+  .pod .tower{ position:absolute; left:-17px; top:-62px; width:34px; height:52px; border-radius:5px 5px 3px 3px;
+    background:linear-gradient(#17213a,#0c1322); box-shadow:inset 0 0 0 1px rgba(120,160,220,.14), 0 10px 20px rgba(0,0,0,.5); overflow:hidden; }
+  .pod .tower .scan{ position:absolute; left:4px; right:4px; top:6px; }
+  .pod .tower .scan i{ display:block; height:3px; margin-bottom:3px; border-radius:2px; background:var(--c); opacity:.55 }
+  .pod .halo{ position:absolute; left:-23px; top:-96px; width:46px;height:46px; border-radius:50%;
+    border:2px solid var(--c); box-shadow:0 0 16px var(--c); opacity:.7 }
+  .pod .core{ position:absolute; left:-7px; top:-80px; width:14px;height:14px;border-radius:50%;
+    background:var(--c); box-shadow:0 0 16px var(--c); }
+  .pod.running .halo,.pod.ok .halo{ animation:opspin2 4s linear infinite }
+  .pod.warn .halo,.pod.needsBuild .halo,.pod.stale .halo{ animation:opspin2 1.4s linear infinite }
+  .pod.error .halo,.pod.crashed .halo{ animation:blink .5s steps(1) infinite }
+  .pod.idle .halo,.pod.notBuilt .halo{ opacity:.22; animation:none }
+  .pod.idle .core,.pod.notBuilt .core{ filter:grayscale(.7) brightness(.6) }
+  .pod.notBuilt .tower{ opacity:.4; filter:grayscale(1) }
+  @keyframes opspin2{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+  .pod .bars{ position:absolute; left:-15px; top:-10px; width:30px; height:12px; display:flex; align-items:flex-end; gap:2px }
+  .pod .bars i{ flex:1; background:var(--c); opacity:.6; height:30%; border-radius:1px }
+  .pod .plate{ position:absolute; left:-62px; top:16px; width:124px; text-align:center }
+  .pod .plate b{ font-size:11.5px } .pod .plate span{ display:block; font-size:9.5px; color:var(--dim) }
+  .pod:hover .base{ outline-color:color-mix(in srgb,var(--c) 70%,transparent) }
+  .pod:hover .tower{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 55%,transparent), 0 10px 24px rgba(0,0,0,.6) }
+  .packet{ position:absolute; width:5px;height:5px;border-radius:50%; margin:-2.5px 0 0 -2.5px; pointer-events:none; z-index:45;
+    box-shadow:0 0 7px currentColor; }
+
+  /* ======================= FLEET CITY ======================= */
+  #cityground{ position:absolute; transform:translate(-50%,-50%); }
+  .building{ cursor:pointer; }
+  .building .base{ position:absolute; left:-26px;top:-13px; width:52px;height:26px;
+    clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 25%, transparent), transparent 78%); }
+  .building .shaft{ position:absolute; left:-15px; width:30px; border-radius:4px 4px 2px 2px;
+    background:linear-gradient(#1c2744,#0d1322); box-shadow:0 10px 22px rgba(0,0,0,.5), inset 0 0 0 1px rgba(120,150,200,.1); overflow:hidden; }
+  .building .shaft .win{ position:absolute; inset:0;
+    background-image:repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 9px),
+                     repeating-linear-gradient(0deg, var(--c) 0 3px, transparent 3px 9px);
+    opacity:.20; }
+  .building.running .win,.building.ok .win{ opacity:.32; animation:cityflick 3s steps(1) infinite }
+  .building.warn .win,.building.needsBuild .win,.building.stale .win{ opacity:.3; animation:cityflick 1.1s steps(1) infinite }
+  .building.error .win,.building.crashed .win{ opacity:.42; animation:cityflick .4s steps(1) infinite }
+  .building.idle .win{ opacity:.08 } .building.notBuilt .win{ opacity:.04 }
+  @keyframes cityflick{0%,100%{opacity:.30}47%{opacity:.34}50%{opacity:.14}}
+  .building .cap{ position:absolute; left:-4px; top:-6px; width:8px;height:8px;border-radius:50%;
+    background:var(--c); box-shadow:0 0 14px var(--c); }
+  .building.error .cap,.building.crashed .cap{ animation:blink .5s steps(1) infinite }
+  .building .tag{ position:absolute; left:-60px; top:18px; width:120px; text-align:center; }
+  .building .tag b{ font-size:11px } .building .tag span{ display:block;font-size:9.5px;color:var(--dim) }
+  .building:hover .shaft{ box-shadow:0 10px 26px rgba(0,0,0,.6), inset 0 0 0 1px color-mix(in srgb,var(--c) 60%,transparent) }
+
+  /* ======================= CONSTELLATION ======================= */
+  #sky-lines{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+  #sky-lines line{ stroke:var(--line); stroke-width:1; }
+  .sun{ position:absolute; width:0;height:0; z-index:9000; }
+  .sun .orb{ position:absolute; left:-34px;top:-34px; width:68px;height:68px;border-radius:50%;
+    background:radial-gradient(circle at 38% 35%, #cfe8ff, #4a9eff 55%, #163a66); box-shadow:0 0 50px rgba(74,158,255,.6); }
+  .sun .lbl{ position:absolute; left:-40px;top:40px; width:80px;text-align:center;font-size:10px;letter-spacing:3px;color:#bfe3ff }
+  .cnode{ position:absolute; cursor:pointer; z-index:9500; }
+  .cnode .planet{ position:absolute; left:-13px;top:-13px; width:26px;height:26px;border-radius:50%;
+    background:radial-gradient(circle at 36% 32%, color-mix(in srgb,var(--c) 85%,white), var(--c) 60%, #0b1120);
+    box-shadow:0 0 18px var(--c); }
+  .cnode .halo{ position:absolute; left:-20px;top:-20px; width:40px;height:40px;border-radius:50%;
+    border:1px solid color-mix(in srgb,var(--c) 50%,transparent); opacity:.6 }
+  .cnode.running .halo,.cnode.ok .halo{ animation:ringpulse 3s ease-in-out infinite }
+  .cnode.warn .halo,.cnode.needsBuild .halo,.cnode.stale .halo{ animation:ringpulse 1.3s ease-in-out infinite }
+  .cnode.error .planet,.cnode.crashed .planet{ animation:blink .5s steps(1) infinite }
+  .cnode.idle .planet,.cnode.notBuilt .planet{ filter:grayscale(.7) brightness(.6) }
+  .cnode .nlbl{ position:absolute; left:-55px; top:16px; width:110px; text-align:center; }
+  .cnode .nlbl b{ font-size:11px } .cnode .nlbl span{ display:block;font-size:9.5px;color:var(--dim) }
+
+  /* ======================= CONTROL ROOM (NOC) ======================= */
+  .flat{ position:absolute; inset:64px 0 0 0; overflow:hidden; }
+  #noc{ padding:18px 20px 40px; }
+  .noc-wall{ display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .panel{ background:linear-gradient(#0f1626,#0a0f1b); border:1px solid var(--line); border-radius:12px; padding:12px 13px;
+    position:relative; overflow:hidden; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(120,150,200,.04); }
+  .panel::before{ content:""; position:absolute; left:0;top:0;bottom:0; width:3px; background:var(--c); box-shadow:0 0 14px var(--c) }
+  .panel .ph{ display:flex; align-items:center; gap:8px; }
+  .panel .pled{ width:9px;height:9px;border-radius:50%; background:var(--c); box-shadow:0 0 10px var(--c); flex:none }
+  .panel.warn .pled,.panel.needsBuild .pled,.panel.stale .pled{ animation:blink 1.3s steps(1) infinite }
+  .panel.error .pled,.panel.crashed .pled{ animation:blink .5s steps(1) infinite }
+  .panel .pname{ font-weight:600; font-size:13px } .panel .pkind{ margin-left:auto; font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px }
+  .panel .scope{ height:46px; margin:10px 0 8px; border-radius:7px; background:#070b14; position:relative; overflow:hidden; border:1px solid #141c2e }
+  .panel .scope .sweep{ position:absolute; top:0;bottom:0; width:40%;
+    background:linear-gradient(90deg, transparent, color-mix(in srgb,var(--c) 45%,transparent)); animation:sweep 2.2s linear infinite }
+  @keyframes sweep{0%{left:-40%}100%{left:100%}}
+  .panel .scope .wave{ position:absolute; left:0;right:0; top:50%; height:2px; background:var(--c); opacity:.5 }
+  .panel.idle .scope .sweep,.panel.notBuilt .scope .sweep{ animation-duration:7s; opacity:.4 }
+  .panel.error .scope .sweep,.panel.crashed .scope .sweep{ animation-duration:.7s }
+  .panel .pstat{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--dim) }
+  .panel .pstat b{ color:var(--text); font-weight:600 }
+  #noc .noc-ticker{ position:absolute; left:0; right:0; bottom:0; height:26px; background:#060a12; border-top:1px solid var(--line);
+    display:flex; align-items:center; overflow:hidden; font:11px/1 ui-monospace,Menlo,monospace; color:var(--dim) }
+  #noc .noc-ticker span{ white-space:nowrap; padding-left:100%; animation:ticker 22s linear infinite }
+  @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+
+  /* ======================= TERMINAL ======================= */
+  #term{ padding:0; }
+  .term-win{ position:absolute; inset:22px; border-radius:12px; background:rgba(6,10,18,.92); border:1px solid var(--line);
+    box-shadow:0 24px 60px rgba(0,0,0,.5); display:flex; flex-direction:column; overflow:hidden }
+  .term-bar{ height:34px; flex:none; display:flex; align-items:center; gap:8px; padding:0 13px; background:#0c1322; border-bottom:1px solid var(--line) }
+  .term-bar i{ width:12px;height:12px;border-radius:50% } .tb1{background:#ff5f57} .tb2{background:#febc2e} .tb3{background:#28c840}
+  .term-bar .tt{ margin-left:8px; color:var(--dim); font:11px ui-monospace,Menlo,monospace }
+  .term-body{ flex:1; overflow:auto; padding:14px 16px; font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre; }
+  .term-body .g{color:var(--green)} .term-body .a{color:var(--amber)} .term-body .r{color:var(--red)}
+  .term-body .b{color:var(--blue)} .term-body .d{color:var(--dim)} .term-body .w{color:var(--text)}
+  .cursor{ display:inline-block; width:8px; height:15px; background:var(--green); vertical-align:-2px; animation:blink 1s steps(1) infinite }
+
+  /* ======================= STATUS GRID ======================= */
+  #grid{ padding:18px 20px 24px; overflow:auto; }
+  .cards{ display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); }
+  .card{ position:relative; background:linear-gradient(#121a2c,#0d1320); border:1px solid var(--line); border-left:4px solid var(--c);
+    border-radius:12px; padding:14px 15px; cursor:pointer; transition:.14s; box-shadow:0 8px 22px rgba(0,0,0,.25) }
+  .card:hover{ transform:translateY(-3px); border-color:#39415a }
+  .card .ch{ display:flex; align-items:center; gap:9px }
+  .card .cdot{ width:11px;height:11px;border-radius:50%; background:var(--c); box-shadow:0 0 12px var(--c); flex:none }
+  .card.warn .cdot,.card.needsBuild .cdot,.card.stale .cdot{ animation:blink 1.3s steps(1) infinite }
+  .card.error .cdot,.card.crashed .cdot{ animation:blink .5s steps(1) infinite }
+  .card .cname{ font-size:15px; font-weight:600 }
+  .card .ckind{ margin-left:auto; font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 6px }
+  .card .cstat{ margin-top:9px; font-size:12.5px } .card .cstat b{ color:var(--c) }
+  .card .cmeta{ margin-top:3px; font-size:11px; color:var(--dim) }
+  .card .cver{ position:absolute; right:14px; bottom:12px; font-size:10.5px; color:var(--dim); font-family:ui-monospace,Menlo,monospace }
+
+  /* ---- action popover ---- */
+  #pop{ position:fixed; z-index:60; min-width:190px; padding:12px; border-radius:12px; display:none;
+    background:rgba(17,20,30,.96); border:1px solid var(--line); box-shadow:0 20px 50px rgba(0,0,0,.5); backdrop-filter:blur(12px); }
+  #pop h3{ margin:0 0 2px; font-size:14px; display:flex; align-items:center; gap:7px }
+  #pop .dot{ width:9px;height:9px;border-radius:50%; box-shadow:0 0 8px currentColor }
+  #pop .meta{ color:var(--dim); font-size:11.5px; margin-bottom:10px }
+  #pop .row{ display:flex; gap:6px; flex-wrap:wrap }
+  #pop button{ padding:5px 10px; font-size:12px }
+  #pop .kind{ font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim); border:1px solid var(--line);border-radius:5px;padding:1px 5px }
+  .hint{ position:fixed; left:0; right:0; bottom:12px; text-align:center; color:var(--dim); font-size:11px; z-index:40; pointer-events:none }
+  #stage.grabbing{ cursor:grabbing }
+</style>
+</head>
+<body>
+  <header>
+    <div class="mark"><b></b><b></b><b></b></div>
+    <div><h1>Nexus</h1><div class="sub" id="summary">Booting…</div></div>
+    <div class="spacer"></div>
+    <select id="styleSel" title="Dashboard style"></select>
+    <button class="ghost" id="resetBtn" onclick="resetView()">Reset view</button>
+    <button class="ghost" onclick="send('refresh')">Refresh</button>
+    <button onclick="send('rebuildAll')">Rebuild all</button>
+  </header>
+
+  <div id="stage"></div>
+  <div id="pop"></div>
+  <div class="hint" id="hint"></div>
+
+<script>
+"use strict";
+const ISO = { x: 34, y: 17 };
+const stage = document.getElementById("stage");
+const STYLES = [
+  ["opcenter","Operations Center"],
+  ["office","Animated Office"],["constellation","Constellation"],["city","Fleet City"],
+  ["noc","Control Room"],["terminal","Terminal"],["grid","Status Grid"],
+];
+
+function send(action, id){ window.webkit?.messageHandlers?.nexus?.postMessage({action, id:id||""}); }
+function elt(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function cssid(s){ return String(s).replace(/"/g,'\\"'); }
+function esc(s){ return String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+/* ------------- shared orbit camera (used by spatial views) ------------- */
+const Camera = {
+  yaw:0, tilt:1, zoom:1, panX:0, panY:0,
+  project(wx, wy){
+    const c=Math.cos(this.yaw), s=Math.sin(this.yaw);
+    const rx = wx*c - wy*s, ry = wx*s + wy*c;
+    return { x:(rx-ry)*ISO.x, y:(rx+ry)*ISO.y*this.tilt };
+  },
+  reset(){ this.yaw=0; this.tilt=1; this.zoom=1; this.panX=0; this.panY=0; },
+};
+function project(wx, wy){ return Camera.project(wx, wy); }
+
+/* fit a spatial view's world bounds into the stage, applying zoom + pan */
+function applyCam(view){
+  if(!view || !view.world || !view.bounds) return;
+  const b = view.bounds();
+  const cs = [project(b.min.x,b.min.y),project(b.max.x,b.max.y),project(b.max.x,b.min.y),project(b.min.x,b.max.y)];
+  const xs=cs.map(c=>c.x), ys=cs.map(c=>c.y);
+  const minx=Math.min(...xs), maxx=Math.max(...xs), miny=Math.min(...ys)-70, maxy=Math.max(...ys)+40;
+  const w=(maxx-minx)||1, h=(maxy-miny)||1;
+  const base = Math.min((stage.clientWidth-90)/w, (stage.clientHeight-170)/h, 1.6);
+  const sc = base*Camera.zoom, cx=(minx+maxx)/2, cy=(miny+maxy)/2;
+  view.world.style.transform = `translate(${Camera.panX}px,${Camera.panY}px) scale(${sc}) translate(${-cx}px,${-cy}px)`;
+}
+
+/* ====================================================================== */
+/*  OFFICE                                                                */
+/* ====================================================================== */
+const Office = {
+  spatial:true, world:null, floor:null, layout:null, apps:[], agents:{},
+  mount(){
+    this.agents = {};
+    this.world = elt("div","world"); this.world.id="world";
+    this.world.innerHTML = `
+      <div id="floor"></div>
+      <div id="ring" class="node"></div>
+      <div id="cafe" class="node"></div>
+      <div id="core" class="node">
+        <div class="glow"></div>
+        <div class="rack"><div class="face lt"></div><div class="face rt"></div><div class="top"></div>
+          <div class="leds"><i></i><i></i><i></i><i></i></div></div>
+        <div class="label">NEXUS</div>
+      </div>`;
+    stage.appendChild(this.world);
+    this.floor = this.world.querySelector("#floor");
+  },
+  teardown(){ this.world?.remove(); this.world=null; this.agents={}; },
+  bounds(){ return this.layout ? {min:this.layout.min, max:this.layout.max} : {min:{x:-3,y:-3},max:{x:3,y:3}}; },
+
+  computeLayout(apps){
+    const n = Math.max(1, apps.length);
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    const gapX=3.0, gapY=3.0;
+    const L = { cubicles:[] };
+    L.cubicles = apps.map((a,i)=>{ const r=Math.floor(i/cols), c=i%cols; const x=c*gapX, y=r*gapY;
+      return { id:a.id, x, y, seat:{x, y:y+1.1} }; });
+    const rows = Math.ceil(n/cols);
+    const offx=-(cols-1)*gapX/2, offy=-(rows-1)*gapY/2;
+    L.cubicles.forEach(c=>{ c.x+=offx; c.y+=offy; c.seat.x+=offx; c.seat.y+=offy; });
+    L.cafe={ x:offx-4.2, y:0.4 }; L.core={ x:0, y:offy-3.0 };
+    const xs=L.cubicles.map(c=>c.x).concat(L.cafe.x-1, L.core.x);
+    const ys=L.cubicles.map(c=>c.y).concat(L.cafe.y, L.core.y-1, (offy+(rows-1)*gapY)+2);
+    L.min={ x:Math.min(...xs)-1.5, y:Math.min(...ys)-1.5 };
+    L.max={ x:Math.max(...xs)+1.5, y:Math.max(...ys)+2.5 };
+    this.layout = L;
+  },
+  buildFloor(){
+    const L=this.layout; this.floor.innerHTML="";
+    for(let gy=Math.floor(L.min.y); gy<=Math.ceil(L.max.y); gy++)
+      for(let gx=Math.floor(L.min.x); gx<=Math.ceil(L.max.x); gx++){
+        const p=project(gx,gy); const t=elt("div","tile"+((gx+gy)%2?" alt":""));
+        t.style.left=p.x+"px"; t.style.top=p.y+"px"; this.floor.appendChild(t);
+      }
+  },
+  placeNode(el,w){ const p=project(w.x,w.y); el.style.left=p.x+"px"; el.style.top=p.y+"px"; el.style.zIndex=Math.round(100000+p.y*10); },
+  placeStatics(){
+    const L=this.layout;
+    this.buildFloor();
+    const cafe=this.world.querySelector("#cafe"), core=this.world.querySelector("#core"), ring=this.world.querySelector("#ring");
+    this.placeNode(cafe, L.cafe); this.placeNode(core, L.core);
+    const rp=project(L.core.x,L.core.y); ring.style.left=rp.x+"px"; ring.style.top=rp.y+"px";
+    cafe.innerHTML = `<div class="pad"></div><div class="sign">CAFETERIA</div>`;
+    const cp = project(L.cafe.x, L.cafe.y);
+    for(const d of [[-0.9,-0.3],[0.9,0.4]]){ const p=project(L.cafe.x+d[0],L.cafe.y+d[1]);
+      const t=elt("div","cafetable"); t.style.left=(p.x-cp.x)+"px"; t.style.top=(p.y-cp.y)+"px"; cafe.appendChild(t); }
+    this.world.querySelectorAll(".cube").forEach(cube=>{
+      const lc = L.cubicles.find(c=>c.id===cube.dataset.id); if(lc) this.placeNode(cube,lc);
+    });
+  },
+  cubicleEl(a){
+    const el=elt("div","cube node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
+    el.innerHTML = `
+      <div class="pad"></div><div class="wall back"></div><div class="wall side"></div>
+      <div class="desk"></div><div class="led"></div>
+      <div class="mon"><div class="screen"><div class="glow2"></div>
+         <div class="logs"><i style="width:70%"></i><i style="width:45%"></i><i style="width:85%"></i><i style="width:30%"></i></div>
+         <div class="bar"></div></div><div class="stand"></div><div class="foot"></div></div>
+      <div class="chair"></div>
+      <div class="plate"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+    el.addEventListener("click", e=>{ e.stopPropagation(); openPop(a, el); });
+    return el;
+  },
+  agentEl(a){
+    const el=elt("div","agent node"); el.style.setProperty("--c",a.color);
+    el.innerHTML=`<div class="shadow"></div><div class="fig"><div class="hair"></div><div class="head"></div><div class="torso"></div>
+      <span class="arm l"></span><span class="arm r"></span><span class="leg l"></span><span class="leg r"></span><div class="bubble"></div></div>`;
+    return el;
+  },
+  update(payload){
+    const apps = payload.apps || []; this.apps = apps;
+    this.computeLayout(apps); this.placeStatics();
+    const seen=new Set();
+    apps.forEach((a,i)=>{
+      seen.add(a.id); const lc=this.layout.cubicles[i];
+      let cube=this.world.querySelector(`.cube[data-id="${cssid(a.id)}"]`);
+      if(!cube){ cube=this.cubicleEl(a); this.world.appendChild(cube); }
+      else { cube.className="cube node "+a.key; cube.style.setProperty("--c",a.color);
+        cube.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+      cube._app=a; this.placeNode(cube,lc);
+      let ag=this.agents[a.id];
+      if(!ag){ const el=this.agentEl(a); this.world.appendChild(el);
+        ag=this.agents[a.id]={ id:a.id, el, x:lc.seat.x, y:lc.seat.y, tx:lc.seat.x, ty:lc.seat.y, mode:"sit", wait:0, facing:1 }; }
+      ag.el.style.setProperty("--c",a.color); ag.app=a; ag.seat=lc.seat; ag.cube=lc;
+      ag.el.style.display=(a.key==="notBuilt")?"none":"";
+    });
+    for(const id in this.agents){ if(!seen.has(id)){ this.agents[id].el.remove(); delete this.agents[id]; } }
+    this.world.querySelectorAll(".cube").forEach(c=>{ if(!seen.has(c.dataset.id)) c.remove(); });
+    applyCam(this);
+  },
+  relayout(){ if(this.layout) this.placeStatics(); },
+  tick(dt){
+    const WORKING=this._w||(this._w=new Set(["running","warn","building","needsBuild","error","stale","crashed"]));
+    for(const id in this.agents){
+      const ag=this.agents[id], a=ag.app; if(!a) continue; const k=a.key;
+      if(k==="crashed"){ ag.tx=ag.seat.x; ag.ty=ag.seat.y; ag.mode="down"; }
+      else if(WORKING.has(k)){ ag.tx=ag.seat.x; ag.ty=ag.seat.y;
+        if(this.dist(ag)<0.08) ag.mode=(k==="error")?"alert":(k==="stale")?"sleep":(k==="needsBuild")?"sit":"type"; else ag.mode="walk"; }
+      else { if(ag.wait>0){ ag.wait-=dt; ag.mode=ag.atCafe?"sit":"sit"; }
+        else if(this.dist(ag)<0.12){ const t=this.pickWander(); ag.tx=t.x; ag.ty=t.y; ag.wait=t.wait; ag.bubble=t.bubble; ag.atCafe=(t.bubble==="☕"); }
+        else ag.mode="walk"; }
+      const dx=ag.tx-ag.x, dy=ag.ty-ag.y, d=Math.hypot(dx,dy);
+      if(d>0.02 && ag.mode==="walk"){ const sp=1.6*dt, m=Math.min(1, sp/d); ag.x+=dx*m; ag.y+=dy*m;
+        if(Math.abs(dx)>0.01) ag.facing=(project(ag.tx,ag.ty).x>=project(ag.x,ag.y).x)?1:-1; }
+      const p=project(ag.x,ag.y); ag.el.style.left=p.x+"px"; ag.el.style.top=p.y+"px"; ag.el.style.zIndex=Math.round(100000+p.y*10+5);
+      ag.el.querySelector(".fig").style.transform=`scaleX(${ag.facing})`;
+      ag.el.className="agent node "+ag.mode+((ag.bubble&&(ag.mode==="walk"||ag.atCafe))?" show-bubble":"");
+      const b=ag.el.querySelector(".bubble");
+      b.textContent = ag.mode==="type"?"⌨️":ag.mode==="alert"?"⚠️":ag.mode==="sleep"?"💤":(ag.bubble||"");
+      if(k==="error"||k==="stale"||ag.mode==="type") ag.el.classList.add("show-bubble");
+    }
+  },
+  dist(ag){ return Math.hypot(ag.tx-ag.x, ag.ty-ag.y); },
+  pickWander(){ const L=this.layout;
+    if(Math.random()<0.6) return { x:L.cafe.x+(Math.random()*1.6-0.8), y:L.cafe.y+(Math.random()*1.2-0.6), wait:3+Math.random()*5, bubble:"☕" };
+    return { x:(L.min.x+L.max.x)/2+(Math.random()*6-3), y:(L.min.y+L.max.y)/2+(Math.random()*2-1), wait:1+Math.random()*3, bubble:"" };
+  },
+};
+// office screen micro-animations (harmless when office not mounted)
+setInterval(()=>{
+  document.querySelectorAll(".cube.building .bar").forEach(b=>{ let w=(parseFloat(b.style.width)||0)+8; if(w>100)w=0; b.style.width=w+"%"; });
+  document.querySelectorAll(".cube.running .logs i, .cube.warn .logs i").forEach(i=>{ i.style.width=(20+Math.random()*70).toFixed(0)+"%"; });
+}, 420);
+
+/* ====================================================================== */
+/*  OPERATIONS CENTER (flagship) — agents wired to a central Nexus core   */
+/* ====================================================================== */
+const Opcenter = {
+  spatial:true, world:null, floor:null, svg:null, core:null, pods:{}, apps:[], angle:0, layout:null,
+  mount(){
+    this.pods={}; this.angle=0;
+    this.world=elt("div","world op"); this.world.id="opworld";
+    this.world.innerHTML=`<div id="opfloor"></div>`;
+    this.svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    this.svg.id="opbeams"; this.svg.setAttribute("width","1"); this.svg.setAttribute("height","1"); this.svg.style.overflow="visible";
+    this.world.appendChild(this.svg);
+    this.core=elt("div","node"); this.core.id="opcore";
+    this.core.innerHTML=`<div class="halo h3"></div><div class="halo h2"></div><div class="halo h1"></div>
+      <div class="dais"></div><div class="column"></div><div class="orb"></div><div class="label">NEXUS</div>`;
+    this.world.appendChild(this.core);
+    stage.appendChild(this.world);
+    this.floor=this.world.querySelector("#opfloor");
+  },
+  teardown(){ this.world?.remove(); this.world=null; this.pods={}; },
+  radius(n){ return Math.max(3.2, 2.2 + n*0.42); },
+  bounds(){ const R=this.radius(this.apps.length); return {min:{x:-R-1.5,y:-R-1.5}, max:{x:R+1.5,y:R+2.5}}; },
+  buildFloor(){ const b=this.bounds(); this.floor.innerHTML="";
+    for(let gy=Math.floor(b.min.y); gy<=Math.ceil(b.max.y); gy++)
+      for(let gx=Math.floor(b.min.x); gx<=Math.ceil(b.max.x); gx++){
+        const p=project(gx,gy); const t=elt("div","tile"+((gx+gy)%2?" alt":""));
+        t.style.left=p.x+"px"; t.style.top=p.y+"px"; this.floor.appendChild(t);
+      } },
+  podEl(a){
+    const el=elt("div","pod node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
+    el.innerHTML=`<div class="base"></div>
+      <div class="tower"><div class="scan"><i style="width:80%"></i><i style="width:55%"></i><i style="width:70%"></i><i style="width:40%"></i></div></div>
+      <div class="halo"></div><div class="core"></div>
+      <div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="plate"><b>${esc(a.name)}</b><span>${esc(a.status)} · v${esc(a.version)}</span></div>`;
+    el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a, el); });
+    return el;
+  },
+  // beams carry packets: a working agent gets lively traffic; idle/crashed goes quiet.
+  flow(key){ return {running:1,ok:1,warn:.8,building:1,needsBuild:.5,stale:.3,error:.9,crashed:0,idle:.18,notBuilt:0}[key] ?? .4; },
+  update(payload){
+    const apps=payload.apps||[]; this.apps=apps; this.buildFloor();
+    const seen=new Set();
+    apps.forEach(a=>{ seen.add(a.id);
+      let pd=this.pods[a.id];
+      if(!pd){
+        const el=this.podEl(a); this.world.appendChild(el);
+        const line=document.createElementNS("http://www.w3.org/2000/svg","line"); this.svg.appendChild(line);
+        const packets=[]; for(let i=0;i<3;i++){ const c=elt("div","packet"); this.world.appendChild(c); packets.push(c); }
+        pd=this.pods[a.id]={ el, line, packets, phase:Math.random()*Math.PI*2, speed:0.1+Math.random()*0.06, off:Math.random() };
+      } else { pd.el.className="pod node "+a.key; pd.el.style.setProperty("--c",a.color);
+        pd.el.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)} · v${esc(a.version)}</span>`; }
+      pd.el.style.setProperty("--c",a.color); pd.app=a;
+    });
+    for(const id in this.pods){ if(!seen.has(id)){ const pd=this.pods[id];
+      pd.el.remove(); pd.line.remove(); pd.packets.forEach(c=>c.remove()); delete this.pods[id]; } }
+    applyCam(this); this.relayout();
+  },
+  relayout(){
+    const ids=Object.keys(this.pods), n=ids.length, R=this.radius(n);
+    const c0=project(0,0);
+    const core=this.world.querySelector("#opcore"); core.style.left=c0.x+"px"; core.style.top=c0.y+"px"; core.style.zIndex=Math.round(100000+c0.y*10);
+    ids.forEach((id,i)=>{ const pd=this.pods[id];
+      const ang=pd.phase + this.angle*pd.speed + (i/Math.max(1,n))*Math.PI*2;
+      const wx=Math.cos(ang)*R, wy=Math.sin(ang)*R; const p=project(wx,wy);
+      pd._p=p;
+      pd.el.style.left=p.x+"px"; pd.el.style.top=p.y+"px"; pd.el.style.zIndex=Math.round(100000+p.y*10);
+      pd.line.setAttribute("x1",c0.x); pd.line.setAttribute("y1",c0.y);
+      pd.line.setAttribute("x2",p.x); pd.line.setAttribute("y2",p.y);
+      const f=this.flow(pd.app.key);
+      pd.line.setAttribute("stroke","color-mix(in srgb,"+pd.app.color+" "+(14+f*34)+"%, transparent)");
+      pd.line.setAttribute("stroke-width", f>0?1.5:1);
+    });
+    this._c0=c0;
+  },
+  tick(dt){
+    this.angle+=dt; this.relayout();
+    const c0=this._c0||project(0,0);
+    for(const id in this.pods){ const pd=this.pods[id], p=pd._p; if(!p) continue;
+      const f=this.flow(pd.app.key);
+      // bars jitter with activity
+      if(Math.random()<f*0.5) pd.el.querySelectorAll(".bars i").forEach(b=>{ b.style.height=(15+Math.random()*80*f).toFixed(0)+"%"; });
+      pd.packets.forEach((c,i)=>{
+        if(f<=0){ c.style.opacity=0; return; }
+        let t=((this.angle*(0.25+f*0.55)) + i/3 + pd.phase) % 1;
+        // odd packets travel core→pod (commands), even pod→core (telemetry)
+        const frac = (i%2===0) ? t : 1-t;
+        const x=c0.x+(p.x-c0.x)*frac, y=c0.y+(p.y-c0.y)*frac;
+        c.style.left=x+"px"; c.style.top=y+"px"; c.style.zIndex=Math.round(100000+y*10+2);
+        c.style.color=pd.app.color; c.style.background=pd.app.color;
+        c.style.opacity = (0.3+0.7*Math.sin(t*Math.PI))*Math.min(1,f+0.2);
+      });
+    }
+  },
+};
+
+/* ====================================================================== */
+/*  FLEET CITY                                                            */
+/* ====================================================================== */
+const City = {
+  spatial:true, world:null, ground:null, layout:null,
+  mount(){ this.world=elt("div","world"); this.world.id="city";
+    this.world.innerHTML=`<div id="cityground"></div>`; stage.appendChild(this.world);
+    this.ground=this.world.querySelector("#cityground"); },
+  teardown(){ this.world?.remove(); this.world=null; },
+  bounds(){ return this.layout ? {min:this.layout.min,max:this.layout.max} : {min:{x:-3,y:-3},max:{x:3,y:3}}; },
+  computeLayout(apps){
+    const n=Math.max(1,apps.length), cols=Math.max(1,Math.ceil(Math.sqrt(n))), gap=2.4;
+    const towers=apps.map((a,i)=>{ const r=Math.floor(i/cols), c=i%cols; return {id:a.id,x:c*gap,y:r*gap}; });
+    const rows=Math.ceil(n/cols), ox=-(cols-1)*gap/2, oy=-(rows-1)*gap/2;
+    towers.forEach(t=>{ t.x+=ox; t.y+=oy; });
+    const xs=towers.map(t=>t.x), ys=towers.map(t=>t.y);
+    this.layout={ towers, min:{x:Math.min(...xs)-1.5,y:Math.min(...ys)-1.5}, max:{x:Math.max(...xs)+1.5,y:Math.max(...ys)+2.5} };
+  },
+  buildGround(){ const L=this.layout; this.ground.innerHTML="";
+    for(let gy=Math.floor(L.min.y); gy<=Math.ceil(L.max.y); gy++)
+      for(let gx=Math.floor(L.min.x); gx<=Math.ceil(L.max.x); gx++){
+        const p=project(gx,gy); const t=elt("div","tile"+((gx+gy)%2?" alt":"")); t.style.left=p.x+"px"; t.style.top=p.y+"px"; this.ground.appendChild(t);
+      } },
+  height(a){ const base=42; const by={running:118,ok:118,warn:92,needsBuild:78,building:100,stale:70,error:96,crashed:40,idle:60,notBuilt:34}; return base/2 + (by[a.key]||60); },
+  place(el,w,h){ const p=project(w.x,w.y); el.style.left=p.x+"px"; el.style.top=p.y+"px"; el.style.zIndex=Math.round(100000+p.y*10);
+    const shaft=el.querySelector(".shaft"); shaft.style.height=h+"px"; shaft.style.bottom="0px"; shaft.style.top=(-h)+"px"; const cap=el.querySelector(".cap"); cap.style.top=(-h-6)+"px"; },
+  buildingEl(a){ const el=elt("div","building node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
+    el.innerHTML=`<div class="base"></div><div class="shaft"><div class="win"></div></div><div class="cap"></div>
+      <div class="tag"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+    el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,el); }); return el; },
+  update(payload){ const apps=payload.apps||[]; this.computeLayout(apps); this.buildGround();
+    const seen=new Set();
+    apps.forEach((a,i)=>{ seen.add(a.id); const t=this.layout.towers[i];
+      let b=this.world.querySelector(`.building[data-id="${cssid(a.id)}"]`);
+      if(!b){ b=this.buildingEl(a); this.world.appendChild(b); }
+      else { b.className="building node "+a.key; b.style.setProperty("--c",a.color);
+        b.querySelector(".tag").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+      b._app=a; this.place(b,t,this.height(a));
+    });
+    this.world.querySelectorAll(".building").forEach(b=>{ if(!seen.has(b.dataset.id)) b.remove(); });
+    applyCam(this);
+  },
+  relayout(){ if(!this.layout) return; this.buildGround();
+    this.world.querySelectorAll(".building").forEach(b=>{ const t=this.layout.towers.find(x=>x.id===b.dataset.id); if(t&&b._app) this.place(b,t,this.height(b._app)); }); },
+  tick(){},
+};
+
+/* ====================================================================== */
+/*  CONSTELLATION                                                         */
+/* ====================================================================== */
+const Constellation = {
+  spatial:true, world:null, svg:null, nodes:{}, angle:0, apps:[],
+  mount(){ this.world=elt("div","world"); this.world.id="sky"; this.nodes={}; this.angle=0;
+    this.svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); this.svg.id="sky-lines";
+    this.svg.setAttribute("width","1"); this.svg.setAttribute("height","1"); this.svg.style.overflow="visible";
+    this.world.appendChild(this.svg);
+    const sun=elt("div","sun node"); sun.innerHTML=`<div class="orb"></div><div class="lbl">NEXUS</div>`; this.world.appendChild(sun);
+    stage.appendChild(this.world); },
+  teardown(){ this.world?.remove(); this.world=null; this.nodes={}; },
+  bounds(){ const R=this.radius(this.apps.length); return {min:{x:-R-1,y:-R-1},max:{x:R+1,y:R+2}}; },
+  radius(n){ return Math.max(3, 1.6 + n*0.55); },
+  update(payload){ const apps=payload.apps||[]; this.apps=apps;
+    const seen=new Set();
+    apps.forEach(a=>{ seen.add(a.id);
+      let nd=this.nodes[a.id];
+      if(!nd){ const el=elt("div","cnode node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
+        el.innerHTML=`<div class="halo"></div><div class="planet"></div><div class="nlbl"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+        el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a, el); });
+        this.world.appendChild(el);
+        const line=document.createElementNS("http://www.w3.org/2000/svg","line"); this.svg.appendChild(line);
+        nd=this.nodes[a.id]={ el, line, phase:Math.random()*Math.PI*2, speed:0.12+Math.random()*0.1 };
+      } else { nd.el.className="cnode node "+a.key; nd.el.style.setProperty("--c",a.color);
+        nd.el.querySelector(".nlbl").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+      nd.el.style.setProperty("--c",a.color); nd.app=a;
+    });
+    for(const id in this.nodes){ if(!seen.has(id)){ this.nodes[id].el.remove(); this.nodes[id].line.remove(); delete this.nodes[id]; } }
+    applyCam(this); this.layoutNodes();
+  },
+  layoutNodes(){
+    const ids=Object.keys(this.nodes); const n=ids.length; const R=this.radius(n);
+    const c0=project(0,0);
+    ids.forEach((id,i)=>{ const nd=this.nodes[id];
+      const ang=this.angle*nd.speed + nd.phase + (i/n)*Math.PI*2;
+      const wx=Math.cos(ang)*R, wy=Math.sin(ang)*R; const p=project(wx,wy);
+      nd.el.style.left=p.x+"px"; nd.el.style.top=p.y+"px"; nd.el.style.zIndex=Math.round(100000+p.y*10);
+      nd.line.setAttribute("x1",c0.x); nd.line.setAttribute("y1",c0.y); nd.line.setAttribute("x2",p.x); nd.line.setAttribute("y2",p.y);
+      nd.line.setAttribute("stroke", "color-mix(in srgb,"+nd.app.color+" 35%, transparent)");
+    });
+    const sun=this.world.querySelector(".sun"); sun.style.left=c0.x+"px"; sun.style.top=c0.y+"px";
+  },
+  relayout(){ this.layoutNodes(); },
+  tick(dt){ this.angle+=dt; this.layoutNodes(); },
+};
+
+/* ====================================================================== */
+/*  CONTROL ROOM (NOC) — flat                                             */
+/* ====================================================================== */
+const Noc = {
+  spatial:false, root:null,
+  mount(){ this.root=elt("div","flat"); this.root.id="noc";
+    this.root.innerHTML=`<div class="noc-wall"></div><div class="noc-ticker"><span></span></div>`; stage.appendChild(this.root); },
+  teardown(){ this.root?.remove(); this.root=null; },
+  update(payload){ const apps=payload.apps||[]; const wall=this.root.querySelector(".noc-wall"); wall.innerHTML="";
+    apps.forEach(a=>{ const p=elt("div","panel "+a.key); p.style.setProperty("--c",a.color);
+      p.innerHTML=`<div class="ph"><span class="pled"></span><span class="pname">${esc(a.name)}</span><span class="pkind">${esc(a.kind)}</span></div>
+        <div class="scope"><div class="wave"></div><div class="sweep"></div></div>
+        <div class="pstat"><span>${esc(a.status)}</span><b>v${esc(a.version)}</b></div>
+        <div class="pstat"><span class="d">${esc(a.detail||"")}</span></div>`;
+      p.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,p); }); wall.appendChild(p);
+    });
+    const bad=apps.filter(a=>["error","crashed","warn","stale","needsBuild"].includes(a.key));
+    const line = bad.length ? bad.map(a=>`${a.name}: ${a.status}${a.detail?" ("+a.detail+")":""}`).join("   •   ")
+                            : "ALL SYSTEMS NOMINAL   •   "+apps.map(a=>a.name+" "+a.status).join("   •   ");
+    this.root.querySelector(".noc-ticker span").textContent = "  "+line+"  ";
+  },
+  tick(){}
+};
+
+/* ====================================================================== */
+/*  TERMINAL — flat                                                       */
+/* ====================================================================== */
+const Terminal = {
+  spatial:false, root:null, apps:[], t:0,
+  mount(){ this.root=elt("div","flat"); this.root.id="term";
+    this.root.innerHTML=`<div class="term-win"><div class="term-bar"><i class="tb1"></i><i class="tb2"></i><i class="tb3"></i>
+      <span class="tt">nexus — watch -n5 nexus status</span></div><div class="term-body"></div></div>`;
+    stage.appendChild(this.root); },
+  teardown(){ this.root?.remove(); this.root=null; },
+  spark(key){ const chars="▁▂▃▄▅▆▇"; const base={running:5,ok:5,warn:4,building:6,needsBuild:3,stale:1,error:6,crashed:0,idle:2,notBuilt:0}[key]??3;
+    let s=""; for(let i=0;i<14;i++){ const v=clamp(base+Math.round((Math.random()-0.5)*3),0,6); s+=chars[v]; } return s; },
+  cls(key){ return {running:"g",ok:"g",idle:"d",notBuilt:"d",building:"b",warn:"a",needsBuild:"a",stale:"a",error:"r",crashed:"r"}[key]||"w"; },
+  render(){ const apps=this.apps; const body=this.root?.querySelector(".term-body"); if(!body) return;
+    const pad=(s,n)=>{ s=String(s); return s.length>=n?s.slice(0,n):s+" ".repeat(n-s.length); };
+    const run=apps.filter(a=>["running","ok","stale","warn"].includes(a.key)).length;
+    let out=`<span class="d">nexus@fleet</span> <span class="b">~</span> % nexus status\n`;
+    out+=`<span class="d">${run} of ${apps.length} agents on duty · ${new Date().toLocaleTimeString()}</span>\n\n`;
+    out+=`<span class="d">${pad("AGENT",16)}${pad("STATUS",16)}${pad("VER",9)}ACTIVITY</span>\n`;
+    apps.forEach(a=>{ const c=this.cls(a.key); const dot=a.key==="running"||a.key==="ok"?"●":a.key==="crashed"||a.key==="error"?"✖":a.key==="idle"||a.key==="notBuilt"?"○":"◐";
+      out+=`<span class="${c}">${dot}</span> ${pad(esc(a.name),14)}<span class="${c}">${pad(esc(a.status),16)}</span><span class="d">${pad("v"+esc(a.version),9)}</span><span class="${c}">${this.spark(a.key)}</span>\n`;
+      if(a.detail) out+=`  <span class="d">↳ ${esc(a.detail)}</span>\n`;
+    });
+    out+=`\n<span class="d">nexus@fleet</span> <span class="b">~</span> % <span class="cursor"></span>`;
+    body.innerHTML=out;
+  },
+  update(payload){ this.apps=payload.apps||[]; this.render(); },
+  tick(dt){ this.t+=dt; if(this.t>0.6){ this.t=0; this.render(); } },
+};
+
+/* ====================================================================== */
+/*  STATUS GRID — flat                                                    */
+/* ====================================================================== */
+const Grid = {
+  spatial:false, root:null,
+  mount(){ this.root=elt("div","flat"); this.root.id="grid"; this.root.innerHTML=`<div class="cards"></div>`; stage.appendChild(this.root); },
+  teardown(){ this.root?.remove(); this.root=null; },
+  update(payload){ const apps=payload.apps||[]; const wrap=this.root.querySelector(".cards"); wrap.innerHTML="";
+    apps.forEach(a=>{ const c=elt("div","card "+a.key); c.style.setProperty("--c",a.color);
+      c.innerHTML=`<div class="ch"><span class="cdot"></span><span class="cname">${esc(a.name)}</span><span class="ckind">${esc(a.kind)}</span></div>
+        <div class="cstat"><b>${esc(a.status)}</b></div>
+        <div class="cmeta">${esc(a.detail||"")}</div>
+        <div class="cver">v${esc(a.version)}</div>`;
+      c.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,c); }); wrap.appendChild(c);
+    });
+  },
+  tick(){}
+};
+
+/* ====================================================================== */
+/*  view manager                                                          */
+/* ====================================================================== */
+const VIEWS = { opcenter:Opcenter, office:Office, city:City, constellation:Constellation, noc:Noc, terminal:Terminal, grid:Grid };
+let active=null, activeName=null, lastPayload=null;
+
+function render(payload){
+  lastPayload = payload;
+  const name = VIEWS[payload.style] ? payload.style : "opcenter";
+  if(name !== activeName){
+    if(active && active.teardown) active.teardown();
+    hidePop();
+    activeName = name; active = VIEWS[name];
+    if(active.spatial) Camera.reset();
+    active.mount();
+    updateChrome(name);
+  }
+  active.update(payload);
+  updateSummary(payload);
+}
+function updateSummary(p){
+  const s=p.summary||{};
+  const run = s.running||0, tot = s.total||0;
+  document.getElementById("summary").textContent = `${run} of ${tot} agents on duty · ${new Date().toLocaleTimeString()}`;
+  document.querySelector(".mark").style.setProperty("--worst", s.worst||"#6b7280");
+}
+function updateChrome(name){
+  const sel=document.getElementById("styleSel"); sel.value=name;
+  const spatial = active && active.spatial;
+  document.getElementById("resetBtn").style.display = spatial ? "" : "none";
+  const hints={ opcenter:"Command centre — agents orbit the Nexus core, beams carry commands & telemetry · drag to orbit · scroll to zoom · ⇧-drag to pan · click a pod",
+    office:"Click a cubicle for controls · drag to orbit · scroll to zoom · ⇧-drag to pan",
+    city:"Each tower is an app — taller & brighter means busier · drag to orbit · scroll to zoom",
+    constellation:"Agents orbit the Nexus core · drag to orbit · scroll to zoom · click a planet",
+    noc:"Live control-room wall · click a panel for controls",
+    terminal:"Live `nexus status` feed · click a style above to change the view",
+    grid:"Clean status board · click a card for controls" };
+  document.getElementById("hint").textContent = hints[name]||"";
+}
+
+/* style picker (also drives the native setting) */
+(function initStylePicker(){
+  const sel=document.getElementById("styleSel");
+  STYLES.forEach(([id,label])=>{ const o=document.createElement("option"); o.value=id; o.textContent=label; sel.appendChild(o); });
+  sel.addEventListener("change", ()=>{ const v=sel.value; send("setStyle", v);
+    if(lastPayload){ lastPayload.style=v; render(lastPayload); } });
+})();
+function resetView(){ Camera.reset(); if(active && active.relayout) active.relayout(); applyCam(active); }
+
+/* ---- master animation loop ---- */
+let last=performance.now();
+function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; if(active && active.tick) active.tick(dt); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+/* ---- 3D orbit camera input (spatial views only) ---- */
+let drag=null;
+stage.addEventListener("pointerdown", e=>{
+  if(!active || !active.spatial) return;
+  if(e.target.closest(".cube,.building,.cnode,.pod,#pop,button,select")) return;
+  drag={ x:e.clientX, y:e.clientY, pan:(e.shiftKey||e.button===2), yaw:Camera.yaw, tilt:Camera.tilt, px:Camera.panX, py:Camera.panY };
+  stage.classList.add("grabbing");
+  try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+});
+stage.addEventListener("pointermove", e=>{
+  if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+  if(drag.pan){ Camera.panX=drag.px+dx; Camera.panY=drag.py+dy; applyCam(active); }
+  else { Camera.yaw=drag.yaw + dx*0.01; Camera.tilt=clamp(drag.tilt - dy*0.004, 0.28, 1.45);
+    if(active.relayout) active.relayout(); applyCam(active); }
+});
+function endDrag(){ drag=null; stage.classList.remove("grabbing"); }
+window.addEventListener("pointerup", endDrag);
+window.addEventListener("pointercancel", endDrag);
+stage.addEventListener("contextmenu", e=>{ if(active&&active.spatial) e.preventDefault(); });
+stage.addEventListener("wheel", e=>{
+  if(!active || !active.spatial) return; e.preventDefault();
+  Camera.zoom = clamp(Camera.zoom*(e.deltaY<0?1.08:0.925), 0.4, 3.0); applyCam(active);
+}, {passive:false});
+
+window.addEventListener("resize", ()=>{ if(active && active.spatial) applyCam(active); });
+
+/* ---- action popover ---- */
+function openPop(a, el){
+  const pop=document.getElementById("pop"); const btns=[];
+  if(a.running){ btns.push(btn("Restart","restart",a.id)); btns.push(btn("Stop","stop",a.id)); }
+  else if(a.installed){ btns.push(btn("Open","open",a.id)); }
+  btns.push(btn(a.key==="building"?"Building…":"Rebuild","build",a.id, a.key==="building"));
+  btns.push(btn("Reveal","reveal",a.id,false,true));
+  pop.innerHTML=`<h3><span class="dot" style="background:${a.color};color:${a.color}"></span>${esc(a.name)}
+      <span style="flex:1"></span><span class="kind">${esc(a.kind)}</span></h3>
+    <div class="meta">v${esc(a.version)} · ${esc(a.status)}${a.detail?` — ${esc(a.detail)}`:""}</div>
+    <div class="row">${btns.join("")}</div>`;
+  pop.style.display="block";
+  const r=el.getBoundingClientRect();
+  let x=r.left+r.width/2-95, y=r.top-pop.offsetHeight-8; if(y<70) y=r.bottom+8;
+  x=Math.max(10, Math.min(x, window.innerWidth-pop.offsetWidth-10));
+  pop.style.left=x+"px"; pop.style.top=y+"px";
+}
+function btn(label,action,id,disabled,ghost){ return `<button class="${ghost?"ghost":""}" ${disabled?"disabled":""} onclick="send('${action}','${cssid(id)}');hidePop()">${label}</button>`; }
+function hidePop(){ document.getElementById("pop").style.display="none"; }
+document.addEventListener("click", hidePop);
+
+send("dashboardReady");
+</script>
+</body>
+</html>

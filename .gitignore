@@ -1,0 +1,6 @@
+# Build output
+Nexus.app/
+dist/
+
+# macOS
+.DS_Store
