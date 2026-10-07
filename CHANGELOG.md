@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3 — 2026-10-07
+
+- **Orb Size**: a new menu (Tiny / Small / Medium / Large / Extra Large) to make the floating orb bigger
+  or smaller. It resizes in place, stays on screen, and redraws sharply at every size.
+
 ## 1.2 — 2026-10-06
 
 - **Natural-language voice** — Nexus now understands plain English, not just fixed keywords. Quick

@@ -108,6 +108,12 @@ enum Settings {
         get { d.string(forKey: "orbOrigin").map { NSPointFromString($0) } }
         set { d.set(newValue.map { NSStringFromPoint($0) }, forKey: "orbOrigin") }
     }
+
+    /// Orb size as a multiple of its default; one of `App.orbSizes`.
+    static var orbScale: Double {
+        get { let s = d.double(forKey: "orbScale"); return s > 0 ? s : 1 }
+        set { d.set(newValue, forKey: "orbScale") }
+    }
 }
 
 // MARK: - Per-app actions
@@ -287,9 +293,12 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
     var onClick: (() -> Void)?
     var contextMenu: NSMenu?
 
+    /// The orb's footprint at the current size setting (240×280 at Medium).
+    private var size: NSSize { NSSize(width: 240 * Settings.orbScale, height: 280 * Settings.orbScale) }
+
     private func build() {
         guard panel == nil else { return }
-        let size = NSSize(width: 240, height: 280)
+        let size = self.size
         let p = NSPanel(contentRect: NSRect(origin: .zero, size: size),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = false
@@ -299,6 +308,7 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
 
         let v = OrbView(frame: NSRect(origin: .zero, size: size), configuration: WKWebViewConfiguration())
         v.setValue(false, forKey: "drawsBackground")
+        v.pageZoom = Settings.orbScale
         v.navigationDelegate = self
         v.onClick = { [weak self] in self?.onClick?() }
         v.contextMenu = contextMenu
@@ -307,11 +317,21 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
             v.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         }
         if let o = Settings.orbOrigin, NSScreen.screens.contains(where: { $0.frame.contains(o) }) {
-            p.setFrameOrigin(o)
+            p.setFrameOrigin(Self.onScreen(NSRect(origin: o, size: size)).origin)
         } else if let vf = NSScreen.main?.visibleFrame {
             p.setFrameOrigin(NSPoint(x: vf.maxX - size.width - 20, y: vf.minY + 20))
         }
         panel = p; web = v
+    }
+
+    /// Shifts `f` so it sits fully inside the visible area of the screen under its centre.
+    private static func onScreen(_ f: NSRect) -> NSRect {
+        let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: f.midX, y: f.midY)) } ?? NSScreen.main
+        guard let vf = screen?.visibleFrame else { return f }
+        var r = f
+        r.origin.x = min(max(r.minX, vf.minX), vf.maxX - r.width)
+        r.origin.y = min(max(r.minY, vf.minY), vf.maxY - r.height)
+        return r
     }
 
     var visible: Bool { panel?.isVisible == true }
@@ -321,10 +341,23 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         ready = true
+        js("setScale(\(Settings.orbScale))")
         js("setStyle('\(Settings.orbStyle)')")
         js("setState('\(state)')")
         js("setFleet(\(fleetTotal),\(fleetRunning))")
         if !caption.isEmpty { js("setCaption(\(App.jsString(caption)))") }
+    }
+
+    /// Resizes the orb about its bottom-centre (like Animi's Size menu), kept on screen.
+    func setScale(_ z: Double) {
+        Settings.orbScale = z
+        guard let panel, let web else { return }   // not built yet: build() picks the size up
+        web.pageZoom = z
+        let s = size, old = panel.frame
+        let f = Self.onScreen(NSRect(x: old.midX - s.width / 2, y: old.minY, width: s.width, height: s.height))
+        panel.setFrame(f, display: true, animate: true)
+        Settings.orbOrigin = f.origin
+        js("setScale(\(z))")
     }
 
     func setState(_ s: String) { state = s; js("setState('\(s)')") }
@@ -658,6 +691,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         orbItem.submenu = orbMenu
         menu.addItem(orbItem)
+        let sizeItem = NSMenuItem(title: "Orb Size", action: nil, keyEquivalent: "")
+        let sizeMenu = NSMenu()
+        for (title, scale) in App.orbSizes {
+            let mi = NSMenuItem(title: title, action: #selector(pickOrbSize(_:)), keyEquivalent: "")
+            mi.target = self; mi.representedObject = scale
+            mi.state = abs(Settings.orbScale - scale) < 0.01 ? .on : .off
+            sizeMenu.addItem(mi)
+        }
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
 
         // Launch at login — because Nexus wakes the other agents on command, only it needs this.
         let login = add(menu, "Launch Nexus at Login", #selector(toggleLogin))
@@ -767,6 +810,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? String else { return }
         Settings.orbStyle = id
         orb.setStyle(id)
+        if !Settings.showOrb { toggleOrb() }
+    }
+
+    /// Multiples of the standard orb (same steps as Jarvis); Medium is the original size.
+    static let orbSizes: [(String, Double)] = [("Tiny", 0.5), ("Small", 0.75), ("Medium", 1.0),
+                                               ("Large", 1.4), ("Extra Large", 1.8)]
+
+    @objc func pickOrbSize(_ sender: NSMenuItem) {
+        guard let scale = sender.representedObject as? Double else { return }
+        orb.setScale(scale)
         if !Settings.showOrb { toggleOrb() }
     }
 

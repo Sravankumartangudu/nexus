@@ -33,6 +33,12 @@ function setState(s) { state = s; }
 function setStyle(s) { if (STYLES[s]) style = s; }
 function setLevel(l) { level = Math.min(1, l * 14); }
 function setCaption(t) { cap.textContent = t; cap.style.opacity = t ? 1 : 0; }
+// The window zooms the page to resize the orb; match the canvas backing store so it stays sharp.
+function setScale(z) {
+  const cv = g.canvas;
+  cv.width = cv.height = Math.round(440 * z);
+  g.setTransform(z, 0, 0, z, 0, 0);   // drawing code stays in its 440-unit space
+}
 function setFleet(total, running) {
   fleetData = { total: Math.max(0, total | 0), running: Math.max(0, running | 0) };
 }

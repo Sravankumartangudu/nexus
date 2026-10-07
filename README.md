@@ -124,7 +124,8 @@ ask. On by default when the CLI is present; it falls back to keyword commands ot
 
 **Show Orb** floats a Jarvis-style animated orb on screen that reflects the voice state (idle /
 listening / working / speaking). **Click** it to start listening, **drag** to move it,
-**right-click** for the fleet menu. Choose its look under **Orb Style** — including a **Fleet**
+**right-click** for the fleet menu. Resize it under **Orb Size** (Tiny / Small / Medium / Large /
+Extra Large). Choose its look under **Orb Style**, including a **Fleet**
 style whose orbiting satellites mirror the dashboard's agent count (lit = active, dimmed = idle,
 with a live `running / total` readout in the core).
 
