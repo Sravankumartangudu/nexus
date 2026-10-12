@@ -4,7 +4,7 @@
 every one you build in the future — showing a live green/amber/red health status for each, plus a
 full dashboard window, voice control, and a floating voice orb.
 
-Nexus is the parent of the family: Animi, Sev1 Siren, Jarvis, OrgCS Pulse, Water Buddy, T-Minus,
+Nexus is the parent of the family: Animi, Jarvis, OrgCS Pulse, Water Buddy, T-Minus,
 and whatever comes next. It owns no app's logic; it just keeps an eye on all of them — and, on a
 spoken command, wakes, opens, stops, or rebuilds any of them for you.
 
