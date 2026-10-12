@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4 — 2026-10-12
+
+- **Finds apps kept in an `app/` subfolder.** Discovery used to look only at the top of each folder in `~`, so an app whose `build.sh` and `.app` sit in `<folder>/app/` (such as Log Doctor, next to its engine) never showed up, even with its beacon running. Nexus now checks there too. Rebuild and Open work on that folder as usual.
+- Sev1 Siren is no longer listed: it was merged into OrgCS Pulse.
+
 ## 1.3 — 2026-10-07
 
 - **Orb Size**: a new menu (Tiny / Small / Medium / Large / Extra Large) to make the floating orb bigger

@@ -227,7 +227,9 @@ final class Fleet {
             let dir = (home as NSString).appendingPathComponent(entry)
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue else { continue }
-            guard let app = inspect(dir: dir, folder: entry) else { continue }
+            // Some apps keep their build.sh and .app one level down in app/ (Log Doctor, beside its engine).
+            guard let app = inspect(dir: dir, folder: entry)
+                    ?? inspect(dir: (dir as NSString).appendingPathComponent("app"), folder: entry) else { continue }
             found[app.id] = app
         }
         for app in configApps() { found[app.id] = app }
