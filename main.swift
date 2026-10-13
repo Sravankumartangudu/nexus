@@ -543,6 +543,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let orb = OrbPanel()
     var voiceState = "idle"
     var timer: Timer?
+    private var appMenus: [AppMenuDelegate] = []    // NSMenu holds its delegate weakly
 
     func applicationDidFinishLaunching(_ n: Notification) {
         NexusHome.ensure()
@@ -635,6 +636,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         Fleet.shared.refresh()
+        // Ask every app to mirror its menu now; each app's submenu reads it when it opens.
+        Folder.broadcast(["cmd": "dump"])
+        appMenus = []
         menu.removeAllItems()
         let n = Fleet.shared.apps.count
         let header = NSMenuItem(title: "Nexus — \(Fleet.shared.runningCount)/\(n) apps running", action: nil, keyEquivalent: "")
@@ -655,13 +659,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let d = app.detail.isEmpty ? "" : " — \(app.detail)"
                 let title = "\(app.status.dot)  \(app.name)  ·  \(app.status.word)\(d)"
                 let mi = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                mi.submenu = submenu(for: app)
+                let sub = NSMenu()
+                let fill = AppMenuDelegate { [weak self] m in self?.fillSubmenu(m, for: app) }
+                appMenus.append(fill)
+                sub.delegate = fill
+                sub.addItem(NSMenuItem(title: "…", action: nil, keyEquivalent: ""))   // filled when it opens
+                mi.submenu = sub
                 menu.addItem(mi)
             }
         }
 
         menu.addItem(.separator())
         add(menu, "Open Dashboard…", #selector(openDashboard))
+        // The apps hide their own menu-bar items and live in the submenus above.
+        add(menu, "Keep Agents in Nexus", #selector(toggleFolder)).state = Folder.enabled ? .on : .off
 
         // Dashboard Style ▸ — radio list of the available visualisations.
         let styleItem = NSMenuItem(title: "Dashboard Style", action: nil, keyEquivalent: "")
@@ -729,8 +740,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Quit Nexus", #selector(quit))
     }
 
-    private func submenu(for app: AppInfo) -> NSMenu {
-        let sub = NSMenu()
+    private func fillSubmenu(_ sub: NSMenu, for app: AppInfo) {
+        let running = app.status.severity == 1 || app.status == .stale
+        // The app's own menu first, as if its menu-bar item had been clicked.
+        if running, let items = Folder.menu(app.id), !items.isEmpty {
+            Folder.fill(sub, items, app: app.id, target: self, action: #selector(doMirror(_:)))
+            sub.addItem(.separator())
+        }
         let info = NSMenuItem(title: "\(app.name)  v\(app.version)", action: nil, keyEquivalent: "")
         info.isEnabled = false
         sub.addItem(info)
@@ -738,12 +754,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         where_.isEnabled = false
         sub.addItem(where_)
         sub.addItem(.separator())
-        let running = app.status.severity == 1 || app.status == .stale
         add(sub, running ? "Restart" : "Open", #selector(doOpen(_:)), app.id)
         if running { add(sub, "Stop", #selector(doStop(_:)), app.id) }
         add(sub, app.building ? "Building…" : "Rebuild", #selector(doBuild(_:)), app.id, enabled: !app.building)
         add(sub, "Reveal in Finder", #selector(doReveal(_:)), app.id)
-        return sub
+        if Folder.enabled && Folder.attached(app.id) {
+            add(sub, "Show Icon in Menu Bar", #selector(toggleShown(_:)), app.id).state = Folder.isShown(app.id) ? .on : .off
+        }
     }
 
     @discardableResult
@@ -764,6 +781,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func doOpen(_ s: NSMenuItem) { if let a = app(from: s) { if a.status.severity == 1 { Actions.stop(a); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { Actions.open(a) } } else { Actions.open(a) } } }
+    @objc func doMirror(_ s: NSMenuItem) {
+        guard let r = s.representedObject as? [String: Any], let id = r["id"] as? String else { return }
+        Folder.send(id, ["cmd": "perform", "path": r["path"] ?? [], "title": r["title"] ?? ""])
+    }
+    @objc func toggleFolder() { Folder.enabled.toggle() }
+    @objc func toggleShown(_ s: NSMenuItem) {
+        if let id = s.representedObject as? String { Folder.setShown(id, !Folder.isShown(id)) }
+    }
     @objc func doStop(_ s: NSMenuItem) { if let a = app(from: s) { Actions.stop(a) } }
     @objc func doReveal(_ s: NSMenuItem) { if let a = app(from: s) { Actions.reveal(a) } }
     @objc func doBuild(_ s: NSMenuItem) { if let a = app(from: s) { Actions.build(a) { Fleet.shared.onChange?() } } }

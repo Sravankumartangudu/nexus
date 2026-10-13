@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6 — 2026-10-13
+
+- **A menu-bar folder for the fleet.** Each app's submenu now starts with that app's own menu,
+  mirrored live, so you can use any app from Nexus. Picking an item runs it in the app.
+  - **Keep Agents in Nexus** (menu) hides the apps' own menu-bar icons. **Show Icon in Menu Bar**
+    in an app's submenu keeps that one visible.
+  - Whenever Nexus isn't running, every app shows its icon again.
+- **Beacon v2.** `NexusBeacon.attach(item)` (Swift) and `nexus.attach({ menu, setVisible })`
+  (Electron) let an app live in the folder. It shares its menu through `~/.nexus/menus/`, takes
+  commands from `~/.nexus/inbox/` and follows `~/.nexus/folder.json`. Apps on the older beacon are
+  listed as before. See the README.
+
 ## 1.5 — 2026-10-13
 
 - **Teams.** The fleet is grouped by where each app's repo is published: **Work** (the work GitHub,

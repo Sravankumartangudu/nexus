@@ -112,6 +112,19 @@ or all of them. The Status Grid splits into a section per team. Nothing needs co
 app to a new remote and it moves to the matching team on the next refresh. To put an app in a
 different team, set `"team"` for it in `~/.nexus/apps.json` (see below).
 
+### Menu-bar folder
+
+Nexus can hold the fleet in one menu-bar icon. Each app's submenu starts with **that app's own menu**,
+mirrored live, so picking an item there does exactly what it does from the app's own icon. macOS
+won't let one app hold another's menu-bar item, so each app's beacon shares its menu with Nexus and
+runs the items you pick (beacon v2, see below).
+
+- **Keep Agents in Nexus** (menu) hides the apps' own menu-bar icons.
+- **Show Icon in Menu Bar** in an app's submenu keeps that one app's icon visible while the folder is on.
+- Whenever Nexus isn't running, every app shows its icon again, so no app is ever out of reach.
+
+Apps on the older beacon are listed as before, without their menu, and keep their own icons.
+
 ### Per-app controls
 
 From the menu bar or the dashboard, for each app: **Open / Restart**, **Stop**, **Rebuild** (runs
@@ -216,12 +229,40 @@ nexus.start({ id: 'local.my-app', name: 'My App', version: app.getVersion(),
 
 The beacon is self-contained and has no dependency on Nexus being installed — it's safe to ship.
 
+### Living in the menu-bar folder
+
+To let an app's menu show in Nexus and its icon hide with **Keep Agents in Nexus**, hand the beacon
+the menu-bar item once it has its menu:
+
+```swift
+item.menu = menu
+NexusBeacon.attach(item)
+```
+
+For Electron, pass a function returning the tray menu's template and a way to show or hide the tray:
+
+```js
+nexus.attach({ menu: () => trayTemplate(), setVisible: (on) => on ? makeTray() : dropTray() });
+```
+
+Everything goes through files under `~/.nexus/`:
+
+| File | Written by | What it holds |
+|---|---|---|
+| `menus/<bundleid>.json` | the app | its menu: entries `{i, t, e, s, k}` (index, title, enabled, checked, submenu) or `{i, sep: true}` |
+| `inbox/<bundleid>/*.json` | Nexus | commands: `{"cmd":"dump"}` (write the menu), `{"cmd":"folder"}` (re-read folder.json), `{"cmd":"perform","path":[…],"title":"…"}` (run an item) |
+| `folder.json` | Nexus | `{"enabled": bool, "shown": [bundleids]}` |
+
+The app hides its item only while the folder is on, Nexus is running, and the app isn't on the
+`shown` list.
+
 ---
 
 ## Layout
 
 - `main.swift` — menu bar, dashboard window, voice/orb wiring, per-app actions, refresh loop
 - `Fleet.swift` — discovery, heartbeat reading, status computation
+- `Folder.swift` — the menu-bar folder: mirrored app menus, commands to apps, folder settings
 - `Voice.swift` — wake-word listening, command parsing, speech synthesis
 - `Brain.swift` — natural-language understanding and fleet actions via the local `claude` CLI
 - `dashboard.html` — the dashboard UI and its visualisation styles
