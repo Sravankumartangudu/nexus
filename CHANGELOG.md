@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1 — 2026-10-13
+
+- Finds apps kept in a `mac/` subfolder, as well as `app/`. WheatWise keeps its Mac app in `mac/`,
+  beside its agent and web dashboard, so Nexus missed it. Its icon was hidden in the folder but not listed.
+
 ## 1.6 — 2026-10-13
 
 - **A menu-bar folder for the fleet.** Each app's submenu now starts with that app's own menu,

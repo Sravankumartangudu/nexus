@@ -191,7 +191,7 @@ Two independent signals, combined per app:
 ### Auto-discovery
 
 Nexus scans `~` for anything that looks like one of these apps (a Swift app with a `build.sh`, or
-an Electron app), either at the top of a folder or in its `app/` subfolder, and shows it automatically. **Build a new app in your home folder and it appears
+an Electron app), either at the top of a folder or in its `app/` or `mac/` subfolder, and shows it automatically. **Build a new app in your home folder and it appears
 in Nexus with no configuration.** To track an app that lives elsewhere, add it to
 `~/.nexus/apps.json`:
 
