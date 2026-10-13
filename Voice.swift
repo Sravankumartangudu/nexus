@@ -304,8 +304,13 @@ enum Commands {
 
         Fleet.shared.discover(); Fleet.shared.refresh()
 
+        // A team name ("work", "personal", "local") scopes the command to that team's agents.
+        let team = Fleet.shared.byTeam.map(\.team).first { has(t, [$0.lowercased()]) }
+        let scope = team.map { tm in Fleet.shared.apps.filter { $0.team == tm } } ?? Fleet.shared.apps
+        let label = team.map { "\($0.lowercased()) " } ?? ""
+
         if has(t, ["status","report","how are things","how's the fleet","hows the fleet","what's running","whats running","how is everyone"]) {
-            return statusReport()
+            return statusReport(scope, team: team)
         }
         if has(t, ["dashboard","mission control","show me the office","open the office"]) {
             DispatchQueue.main.async { showDashboard?() }
@@ -318,21 +323,22 @@ enum Commands {
         let rebuildV = has(t, ["rebuild","build"])
         let openV    = has(t, ["open","start","launch","activate","wake","boot","run","bring up","fire up","turn on","power up"])
 
-        // Whole-fleet operations.
-        if wantsAll && stopV {
-            let running = Fleet.shared.apps.filter { $0.status.severity == 1 || $0.status == .stale }
+        // Whole-fleet (or whole-team) operations.
+        let many = wantsAll || team != nil
+        if many && stopV {
+            let running = scope.filter { $0.status.severity == 1 || $0.status == .stale }
             running.forEach { Actions.stop($0) }
-            return running.isEmpty ? "No agents are running." : "Standing down all \(running.count) agents."
+            return running.isEmpty ? "No \(label)agents are running." : "Standing down all \(running.count) \(label)agents."
         }
-        if wantsAll && rebuildV {
-            let build = Fleet.shared.apps.filter { $0.installed && !$0.building }
+        if many && rebuildV {
+            let build = scope.filter { $0.installed && !$0.building }
             build.forEach { a in Actions.build(a) { Fleet.shared.onChange?() } }
-            return "Rebuilding \(build.count) agents."
+            return "Rebuilding \(build.count) \(label)agents."
         }
-        if wantsAll && (openV || restartV) {
-            let idle = Fleet.shared.apps.filter { $0.installed && !($0.status.severity == 1 || $0.status == .stale) }
+        if many && (openV || restartV) {
+            let idle = scope.filter { $0.installed && !($0.status.severity == 1 || $0.status == .stale) }
             idle.forEach { Actions.open($0) }
-            return idle.isEmpty ? "All agents are already on duty." : "Activating all agents. Bringing \(idle.count) online."
+            return idle.isEmpty ? "All \(label)agents are already on duty." : "Activating all \(label)agents. Bringing \(idle.count) online."
         }
 
         // Single-agent operations.
@@ -347,11 +353,10 @@ enum Commands {
         return "Opening \(app.name)."
     }
 
-    private static func statusReport() -> String {
-        let apps = Fleet.shared.apps
+    private static func statusReport(_ apps: [AppInfo], team: String?) -> String {
         guard !apps.isEmpty else { return "I'm not watching any agents yet." }
-        let run = Fleet.shared.runningCount
-        var line = "\(run) of \(apps.count) agents on duty."
+        let run = apps.filter { $0.status.severity == 1 || $0.status == .stale }.count
+        var line = "\(run) of \(apps.count) \(team.map { "\($0.lowercased()) " } ?? "")agents on duty."
         let trouble = apps.filter { $0.status.severity >= 2 }
         if !trouble.isEmpty {
             line += " " + trouble.map { "\($0.name) is \($0.status.word.lowercased())" }.joined(separator: ", ") + "."

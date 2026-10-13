@@ -53,10 +53,10 @@ final class Brain {
     emoji, no stage directions. Use each agent's real name.
 
     You can act on the fleet. To do something, put a directive on its own in your reply, for example:
-    [[do: open Jarvis]]  [[do: restart OrgCS Pulse]]  [[do: stop all]]  [[do: rebuild all]]  [[do: open all]]
+    [[do: open Jarvis]]  [[do: restart OrgCS Pulse]]  [[do: stop all]]  [[do: rebuild all]]  [[do: open all]]  [[do: open work]]  [[do: stop personal]]
     The directive is executed and never spoken, so also say a short confirmation. Only act when the \
     user actually asks you to; for a plain question just answer from the fleet state you are given. \
-    The text after "do:" is a command for the fleet, so phrase it as a verb plus an agent name or "all".
+    The text after "do:" is a command for the fleet, so phrase it as a verb plus an agent name, "all", or a team name. Agents are grouped into teams by where their code is published: Work (the work GitHub), Personal (public GitHub), and Local (not on git yet).
     """
 
     /// A compact, current description of every agent, refreshed into the system prompt on change.
@@ -67,7 +67,7 @@ final class Brain {
         let lines = apps.map { a -> String in
             let state = a.status.word
             let extra = a.detail.isEmpty ? "" : " — \(a.detail)"
-            return "• \(a.name): \(state)\(extra)"
+            return "• \(a.name) (\(a.team) team): \(state)\(extra)"
         }
         return "\(Fleet.shared.runningCount) of \(apps.count) running.\n" + lines.joined(separator: "\n")
     }

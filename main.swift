@@ -32,6 +32,12 @@ enum Settings {
     }
     static func label(_ id: String) -> String { STYLES.first { $0.id == id }?.label ?? id }
 
+    /// The dashboard's team filter: "" shows every team.
+    static var team: String {
+        get { d.string(forKey: "dashboardTeam") ?? "" }
+        set { d.set(newValue, forKey: "dashboardTeam") }
+    }
+
     // MARK: Voice
 
     /// Whether Nexus listens for its wake word and runs spoken fleet commands.
@@ -242,6 +248,7 @@ final class Dashboard: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
                 "version": a.version, "detail": a.detail,
                 "running": a.status.severity == 1 || a.status == .stale,
                 "installed": a.installed, "dir": a.dir,
+                "team": a.team, "repo": Team.short(a.repo),
             ]
         }
         let summary: [String: Any] = [
@@ -249,7 +256,8 @@ final class Dashboard: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             "running": Fleet.shared.runningCount,
             "worst": Fleet.shared.worst.hex,
         ]
-        let payload: [String: Any] = ["apps": apps, "summary": summary, "style": Settings.style]
+        let payload: [String: Any] = ["apps": apps, "summary": summary, "style": Settings.style,
+                                      "teams": Fleet.shared.byTeam.map(\.team), "team": Settings.team]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
         web.evaluateJavaScript("render(\(json))")
@@ -634,12 +642,22 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        for app in Fleet.shared.apps {
-            let d = app.detail.isEmpty ? "" : " — \(app.detail)"
-            let title = "\(app.status.dot)  \(app.name)  ·  \(app.status.word)\(d)"
-            let mi = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            mi.submenu = submenu(for: app)
-            menu.addItem(mi)
+        // One section per team (Work / Personal / Local), as set by where each app's repo lives.
+        for (i, group) in Fleet.shared.byTeam.enumerated() {
+            if i > 0 { menu.addItem(.separator()) }
+            let up = group.apps.filter { $0.status.severity == 1 || $0.status == .stale }.count
+            let th = NSMenuItem(title: "\(group.team.uppercased())  ·  \(up)/\(group.apps.count) running", action: nil, keyEquivalent: "")
+            th.isEnabled = false
+            th.attributedTitle = NSAttributedString(string: th.title, attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.secondaryLabelColor])
+            menu.addItem(th)
+            for app in group.apps {
+                let d = app.detail.isEmpty ? "" : " — \(app.detail)"
+                let title = "\(app.status.dot)  \(app.name)  ·  \(app.status.word)\(d)"
+                let mi = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                mi.submenu = submenu(for: app)
+                menu.addItem(mi)
+            }
         }
 
         menu.addItem(.separator())
@@ -716,6 +734,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let info = NSMenuItem(title: "\(app.name)  v\(app.version)", action: nil, keyEquivalent: "")
         info.isEnabled = false
         sub.addItem(info)
+        let where_ = NSMenuItem(title: "\(app.team) · \(Team.short(app.repo))", action: nil, keyEquivalent: "")
+        where_.isEnabled = false
+        sub.addItem(where_)
         sub.addItem(.separator())
         let running = app.status.severity == 1 || app.status == .stale
         add(sub, running ? "Restart" : "Open", #selector(doOpen(_:)), app.id)
@@ -753,6 +774,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "refresh": tick()
         case "rebuildAll": rebuildAll()
         case "setStyle": Settings.style = id; dashboard.push()   // id carries the style id here
+        case "setTeam": Settings.team = id; dashboard.push()     // …and the team name ("" = all) here
         default:
             guard let a = Fleet.shared.app(id) else { return }
             switch action {
@@ -846,9 +868,13 @@ if CommandLine.arguments.contains("--probe") {
     Fleet.shared.discover()
     Fleet.shared.refresh()
     print("Nexus — \(Fleet.shared.runningCount)/\(Fleet.shared.apps.count) running\n")
-    for a in Fleet.shared.apps {
-        let d = a.detail.isEmpty ? "" : " — \(a.detail)"
-        print("\(a.status.dot) \(a.name.padding(toLength: 14, withPad: " ", startingAt: 0)) \(a.status.word)\(d)  [\(a.kind) v\(a.version)]")
+    for group in Fleet.shared.byTeam {
+        print("\(group.team.uppercased())")
+        for a in group.apps {
+            let d = a.detail.isEmpty ? "" : " — \(a.detail)"
+            print("\(a.status.dot) \(a.name.padding(toLength: 14, withPad: " ", startingAt: 0)) \(a.status.word)\(d)  [\(a.kind) v\(a.version)]")
+        }
+        print("")
     }
     exit(0)
 }

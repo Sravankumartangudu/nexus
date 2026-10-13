@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5 — 2026-10-13
+
+- **Teams.** The fleet is grouped by where each app's repo is published: **Work** (the work GitHub,
+  git.soma), **Personal** (github.com) and **Local** (not on git yet). Nexus reads each app's git
+  `origin`, so an app moves to the right team as soon as it's pushed. You can override the team
+  with `"team"` in `~/.nexus/apps.json`.
+  - Menu: a heading per team with its running count. Each app's submenu shows its team and repo.
+  - Dashboard: a team picker that filters every view. The Status Grid has a section per team, and
+    the popup for an app shows its team and repo.
+  - Voice: team commands such as "open work", "stop all personal" and "work status". The Claude
+    brain sees each agent's team too.
+  - `--probe` lists apps under their team.
+- Operations Center and Constellation space their agents evenly around the core. Before, agents could
+  drift on top of each other.
+
 ## 1.4 — 2026-10-12
 
 - **Finds apps kept in an `app/` subfolder.** Discovery used to look only at the top of each folder in `~`, so an app whose `build.sh` and `.app` sit in `<folder>/app/` (such as Log Doctor, next to its engine) never showed up, even with its beacon running. Nexus now checks there too. Rebuild and Open work on that folder as usual.

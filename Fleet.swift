@@ -131,6 +131,69 @@ enum Status: Int, Comparable {
     }
 }
 
+// MARK: - Team
+
+/// Apps are grouped into teams by where their git repo is published: the work GitHub (git.soma)
+/// is "Work", public github.com is "Personal", and an app with no remote yet is "Local". Any other
+/// host becomes a team named after that host. `"team"` in ~/.nexus/apps.json overrides it.
+enum Team {
+    static let work = "Work", personal = "Personal", local = "Local"
+
+    static func of(remote: String?) -> String {
+        guard let host = remote.flatMap(host(of:)) else { return local }
+        if host.hasPrefix("git.soma") || host.hasSuffix("salesforce.com") { return work }
+        if host == "github.com" { return personal }
+        return host
+    }
+
+    /// Work first, then Personal, other hosts alphabetically, and Local last.
+    static func order(_ a: String, _ b: String) -> Bool {
+        func rank(_ t: String) -> Int { t == work ? 0 : t == personal ? 1 : t == local ? 3 : 2 }
+        return (rank(a), a) < (rank(b), b)
+    }
+
+    /// One-line description for menus, e.g. "git.soma.salesforce.com/stangudu/Jarvis".
+    static func short(_ remote: String?) -> String {
+        guard let r = remote else { return "not on git" }
+        var s = r.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "ssh://", with: "")
+        if let at = s.firstIndex(of: "@") { s = String(s[s.index(after: at)...]).replacingOccurrences(of: ":", with: "/") }
+        return s.hasSuffix(".git") ? String(s.dropLast(4)) : s
+    }
+
+    private static func host(of url: String) -> String? {
+        if let h = URL(string: url)?.host { return h.lowercased() }
+        // scp-style: git@host:owner/repo.git
+        guard let at = url.firstIndex(of: "@"), let colon = url[at...].firstIndex(of: ":") else { return nil }
+        return String(url[url.index(after: at)..<colon]).lowercased()
+    }
+
+    /// The `origin` URL of the git repo containing `dir` (walking up, so app/ subfolders work),
+    /// read straight from .git/config — no git process per refresh.
+    static func remote(of dir: String) -> String? {
+        let home = NSHomeDirectory()
+        var d = dir
+        while d.hasPrefix(home) && d != home {
+            let cfg = (d as NSString).appendingPathComponent(".git/config")
+            if let text = try? String(contentsOfFile: cfg, encoding: .utf8) { return originURL(in: text) }
+            d = (d as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+
+    private static func originURL(in config: String) -> String? {
+        var section = "", first: String?
+        for raw in config.split(separator: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") { section = line; continue }
+            guard section.hasPrefix("[remote "), line.hasPrefix("url"), let eq = line.firstIndex(of: "=") else { continue }
+            let url = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            if section == "[remote \"origin\"]" { return url }
+            if first == nil { first = url }
+        }
+        return first
+    }
+}
+
 // MARK: - App
 
 final class AppInfo {
@@ -146,8 +209,14 @@ final class AppInfo {
     var building = false
     var buildResult: String?    // transient note after a build finishes
 
+    /// Where the source is published (the git `origin` URL), and the team that implies.
+    var repo: String?
+    var team = Team.local
+
     init(id: String, name: String, dir: String, kind: String, bundlePath: String?) {
         self.id = id; self.name = name; self.dir = dir; self.kind = kind; self.bundlePath = bundlePath
+        repo = Team.remote(of: dir)
+        team = Team.of(remote: repo)
     }
 
     var installed: Bool { bundlePath != nil || (kind == "electron" && FileManager.default.fileExists(atPath: (dir as NSString).appendingPathComponent("node_modules"))) }
@@ -254,6 +323,11 @@ final class Fleet {
     var worst: Status { apps.map(\.status).min() ?? .idle }
     var runningCount: Int { apps.filter { $0.status.severity == 1 || ($0.status == .stale) }.count }
 
+    /// The fleet split into teams (Work, Personal, …, Local), each keeping the urgency order.
+    var byTeam: [(team: String, apps: [AppInfo])] {
+        Dictionary(grouping: apps, by: \.team).sorted { Team.order($0.key, $1.key) }.map { ($0.key, $0.value) }
+    }
+
     // MARK: Discovery helpers
 
     private func inspect(dir: String, folder: String) -> AppInfo? {
@@ -326,7 +400,9 @@ final class Fleet {
             let id = o["id"] as? String ?? "local.\(name.lowercased())"
             let bundle = (try? FileManager.default.contentsOfDirectory(atPath: dir))?.first { $0.hasSuffix(".app") }
                 .map { (dir as NSString).appendingPathComponent($0) }
-            return AppInfo(id: id, name: name, dir: dir, kind: kind, bundlePath: bundle)
+            let app = AppInfo(id: id, name: name, dir: dir, kind: kind, bundlePath: bundle)
+            if let team = o["team"] as? String, !team.isEmpty { app.team = team }
+            return app
         }
     }
 

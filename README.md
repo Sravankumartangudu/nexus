@@ -94,6 +94,24 @@ a visualisation from the menu-bar **Dashboard Style** submenu or the in-window p
 Spatial views share one orbit camera: **drag** to orbit, **wheel** to zoom, **⇧-drag / right-drag**
 to pan, and **Reset view** to recenter.
 
+### Teams
+
+Nexus groups the fleet into **teams** by where each app's code is published. It reads the `origin`
+remote from the app's git repo:
+
+| Team | Repo lives on |
+|---|---|
+| **Work** | the work GitHub (`git.soma.salesforce.com`) |
+| **Personal** | public `github.com` |
+| **Local** | not on git yet |
+| *host name* | any other git host, e.g. `gitlab.com` |
+
+The menu lists apps under a heading for each team, with its running count. Each app's submenu shows
+its team and repo. In the dashboard, the **team picker** (left of the style picker) shows one team
+or all of them. The Status Grid splits into a section per team. Nothing needs configuring: push an
+app to a new remote and it moves to the matching team on the next refresh. To put an app in a
+different team, set `"team"` for it in `~/.nexus/apps.json` (see below).
+
 ### Per-app controls
 
 From the menu bar or the dashboard, for each app: **Open / Restart**, **Stop**, **Rebuild** (runs
@@ -109,7 +127,8 @@ Enable **Voice Control** from the menu (or Settings). On first use macOS will as
 - **Wake word:** say **"Nexus"**. You can add your own names in **Settings → Wake words**.
 - **Commands** (after the wake word): open / start / activate / stop / restart / rebuild a named
   agent — e.g. *"Nexus, open Jarvis"*, *"Nexus, restart OrgCS Pulse"* — or address the whole fleet
-  (*"stop all"*, *"rebuild all"*). Ask *"status"* for a spoken fleet report, or *"open dashboard"*.
+  (*"stop all"*, *"rebuild all"*) or a whole team (*"open work"*, *"stop all personal"*, *"work
+  status"*). Ask *"status"* for a spoken fleet report, or *"open dashboard"*.
 
 Speech recognition is on-device where supported; set your **Recognition accent** in Settings for
 better accuracy.
@@ -165,9 +184,12 @@ in Nexus with no configuration.** To track an app that lives elsewhere, add it t
 
 ```json
 [
-  { "name": "My Service", "dir": "/Users/you/code/my-service", "kind": "electron", "id": "local.my-service" }
+  { "name": "My Service", "dir": "/Users/you/code/my-service", "kind": "electron", "id": "local.my-service",
+    "team": "Work" }
 ]
 ```
+
+`team` is optional. Without it, the team comes from the app's git remote.
 
 ---
 

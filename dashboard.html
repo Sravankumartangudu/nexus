@@ -311,6 +311,8 @@
   .card.warn .cdot,.card.needsBuild .cdot,.card.stale .cdot{ animation:blink 1.3s steps(1) infinite }
   .card.error .cdot,.card.crashed .cdot{ animation:blink .5s steps(1) infinite }
   .card .cname{ font-size:15px; font-weight:600 }
+  .cteam{ grid-column:1/-1; margin:6px 0 -4px; font-size:11px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--text) }
+  .cteam span{ margin-left:10px; font-weight:500; letter-spacing:.4px; color:var(--dim); text-transform:none }
   .card .ckind{ margin-left:auto; font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 6px }
   .card .cstat{ margin-top:9px; font-size:12.5px } .card .cstat b{ color:var(--c) }
   .card .cmeta{ margin-top:3px; font-size:11px; color:var(--dim) }
@@ -334,6 +336,7 @@
     <div class="mark"><b></b><b></b><b></b></div>
     <div><h1>Nexus</h1><div class="sub" id="summary">Booting…</div></div>
     <div class="spacer"></div>
+    <select id="teamSel" title="Team — set by where each app's repo is published"></select>
     <select id="styleSel" title="Dashboard style"></select>
     <button class="ghost" id="resetBtn" onclick="resetView()">Reset view</button>
     <button class="ghost" onclick="send('refresh')">Refresh</button>
@@ -586,7 +589,7 @@ const Opcenter = {
     const c0=project(0,0);
     const core=this.world.querySelector("#opcore"); core.style.left=c0.x+"px"; core.style.top=c0.y+"px"; core.style.zIndex=Math.round(100000+c0.y*10);
     ids.forEach((id,i)=>{ const pd=this.pods[id];
-      const ang=pd.phase + this.angle*pd.speed + (i/Math.max(1,n))*Math.PI*2;
+      const ang=this.angle*0.12 + (i/Math.max(1,n))*Math.PI*2;   // evenly spaced, orbiting together
       const wx=Math.cos(ang)*R, wy=Math.sin(ang)*R; const p=project(wx,wy);
       pd._p=p;
       pd.el.style.left=p.x+"px"; pd.el.style.top=p.y+"px"; pd.el.style.zIndex=Math.round(100000+p.y*10);
@@ -701,7 +704,7 @@ const Constellation = {
     const ids=Object.keys(this.nodes); const n=ids.length; const R=this.radius(n);
     const c0=project(0,0);
     ids.forEach((id,i)=>{ const nd=this.nodes[id];
-      const ang=this.angle*nd.speed + nd.phase + (i/n)*Math.PI*2;
+      const ang=this.angle*0.15 + (i/n)*Math.PI*2;   // evenly spaced, orbiting together
       const wx=Math.cos(ang)*R, wy=Math.sin(ang)*R; const p=project(wx,wy);
       nd.el.style.left=p.x+"px"; nd.el.style.top=p.y+"px"; nd.el.style.zIndex=Math.round(100000+p.y*10);
       nd.line.setAttribute("x1",c0.x); nd.line.setAttribute("y1",c0.y); nd.line.setAttribute("x2",p.x); nd.line.setAttribute("y2",p.y);
@@ -775,7 +778,12 @@ const Grid = {
   mount(){ this.root=elt("div","flat"); this.root.id="grid"; this.root.innerHTML=`<div class="cards"></div>`; stage.appendChild(this.root); },
   teardown(){ this.root?.remove(); this.root=null; },
   update(payload){ const apps=payload.apps||[]; const wrap=this.root.querySelector(".cards"); wrap.innerHTML="";
-    apps.forEach(a=>{ const c=elt("div","card "+a.key); c.style.setProperty("--c",a.color);
+    const teams=(payload.teams||[]).filter(t=>apps.some(a=>a.team===t)), grouped=teams.length>1;
+    const order=grouped ? teams.flatMap(t=>[{head:t}, ...apps.filter(a=>a.team===t)]) : apps;
+    order.forEach(a=>{
+      if(a.head){ const n=apps.filter(x=>x.team===a.head), up=n.filter(x=>x.running).length;
+        const h=elt("div","cteam"); h.innerHTML=`${esc(a.head)}<span>${up}/${n.length} running</span>`; wrap.appendChild(h); return; }
+      const c=elt("div","card "+a.key); c.style.setProperty("--c",a.color);
       c.innerHTML=`<div class="ch"><span class="cdot"></span><span class="cname">${esc(a.name)}</span><span class="ckind">${esc(a.kind)}</span></div>
         <div class="cstat"><b>${esc(a.status)}</b></div>
         <div class="cmeta">${esc(a.detail||"")}</div>
@@ -794,6 +802,8 @@ let active=null, activeName=null, lastPayload=null;
 
 function render(payload){
   lastPayload = payload;
+  updateTeams(payload);
+  payload = teamView(payload);
   const name = VIEWS[payload.style] ? payload.style : "opcenter";
   if(name !== activeName){
     if(active && active.teardown) active.teardown();
@@ -809,7 +819,8 @@ function render(payload){
 function updateSummary(p){
   const s=p.summary||{};
   const run = s.running||0, tot = s.total||0;
-  document.getElementById("summary").textContent = `${run} of ${tot} agents on duty · ${new Date().toLocaleTimeString()}`;
+  const team = p.team && (p.teams||[]).includes(p.team) ? `${p.team} team · ` : "";
+  document.getElementById("summary").textContent = `${team}${run} of ${tot} agents on duty · ${new Date().toLocaleTimeString()}`;
   document.querySelector(".mark").style.setProperty("--worst", s.worst||"#6b7280");
 }
 function updateChrome(name){
@@ -825,6 +836,28 @@ function updateChrome(name){
     grid:"Clean status board · click a card for controls" };
   document.getElementById("hint").textContent = hints[name]||"";
 }
+
+/* team filter — Work / Personal / Local, from each app's git remote (also a native setting) */
+function teamView(p){
+  if(!p.team || !(p.teams||[]).includes(p.team)) return p;
+  const apps=(p.apps||[]).filter(a=>a.team===p.team);
+  const running=apps.filter(a=>a.running).length;
+  const worst=apps.length ? apps.reduce((w,a)=>sev(a)>sev(w)?a:w).color : "#6b7280";
+  return {...p, apps, summary:{...p.summary, total:apps.length, running, worst}};
+}
+function sev(a){ return {error:3,crashed:3,stale:2,warn:2,needsBuild:2,running:1}[a.key]||0; }
+function updateTeams(p){
+  const sel=document.getElementById("teamSel"), teams=p.teams||[];
+  const want=[["","All teams"], ...teams.map(t=>[t, `${t} (${(p.apps||[]).filter(a=>a.team===t).length})`])];
+  if(sel.dataset.sig!==JSON.stringify(want)){
+    sel.innerHTML=""; want.forEach(([v,l])=>{ const o=document.createElement("option"); o.value=v; o.textContent=l; sel.appendChild(o); });
+    sel.dataset.sig=JSON.stringify(want);
+  }
+  sel.value = teams.includes(p.team) ? p.team : "";
+  sel.style.display = teams.length>1 ? "" : "none";
+}
+document.getElementById("teamSel").addEventListener("change", e=>{ const v=e.target.value; send("setTeam", v);
+  if(lastPayload){ lastPayload.team=v; render(lastPayload); } });
 
 /* style picker (also drives the native setting) */
 (function initStylePicker(){
@@ -874,8 +907,9 @@ function openPop(a, el){
   btns.push(btn(a.key==="building"?"Building…":"Rebuild","build",a.id, a.key==="building"));
   btns.push(btn("Reveal","reveal",a.id,false,true));
   pop.innerHTML=`<h3><span class="dot" style="background:${a.color};color:${a.color}"></span>${esc(a.name)}
-      <span style="flex:1"></span><span class="kind">${esc(a.kind)}</span></h3>
+      <span style="flex:1"></span><span class="kind">${esc(a.team||"")}</span><span class="kind">${esc(a.kind)}</span></h3>
     <div class="meta">v${esc(a.version)} · ${esc(a.status)}${a.detail?` — ${esc(a.detail)}`:""}</div>
+    <div class="meta" style="margin-top:-6px">${esc(a.repo||"")}</div>
     <div class="row">${btns.join("")}</div>`;
   pop.style.display="block";
   const r=el.getBoundingClientRect();
