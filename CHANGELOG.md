@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 — 2026-10-15
+
+- **🎨 Appearance: System / Light / Dark.** Pick it in the menu (🎨 Appearance) or in Settings.
+  It applies at once; System follows macOS (Auto included).
+- The dashboard has a new light theme (all seven views), and keeps its dark look unchanged.
+- The voice orb looks the same in every mode.
+
 ## 1.6.1 — 2026-10-13
 
 - Finds apps kept in a `mac/` subfolder, as well as `app/`. WheatWise keeps its Mac app in `mac/`,

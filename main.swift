@@ -38,6 +38,21 @@ enum Settings {
         set { d.set(newValue, forKey: "dashboardTeam") }
     }
 
+    // MARK: Appearance
+
+    /// Light or dark look: "system" (follows macOS, default), "light" or "dark".
+    static var appearance: String {
+        get { let v = d.string(forKey: "appearance") ?? "system"; return appearances.contains { $0.id == v } ? v : "system" }
+        set { d.set(newValue, forKey: "appearance") }
+    }
+    static let appearances: [(id: String, label: String)] = [("system", "System"), ("light", "Light"), ("dark", "Dark")]
+    /// The whole app (dashboard, settings, menus) takes the chosen look; nil follows macOS.
+    /// The orb panel pins its own dark appearance, so it looks the same in every mode.
+    static func applyAppearance() {
+        NSApp.appearance = appearance == "dark" ? NSAppearance(named: .darkAqua)
+            : appearance == "light" ? NSAppearance(named: .aqua) : nil
+    }
+
     // MARK: Voice
 
     /// Whether Nexus listens for its wake word and runs spoken fleet commands.
@@ -205,7 +220,12 @@ final class Dashboard: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         w.title = "Nexus"
         w.titleVisibility = .hidden            // keep a draggable titlebar, but no title text
         w.titlebarAppearsTransparent = true    // let the dark page show through for a seamless look
-        w.backgroundColor = NSColor(red: 7/255, green: 10/255, blue: 18/255, alpha: 1)  // matches --bg0
+        // Matches the page's --bg0 in each look (dark / light), and follows the chosen appearance.
+        w.backgroundColor = NSColor(name: nil) { a in
+            a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(red: 7/255, green: 10/255, blue: 18/255, alpha: 1)
+                : NSColor(red: 236/255, green: 239/255, blue: 246/255, alpha: 1)
+        }
         w.isMovableByWindowBackground = true
         w.center()
         w.isReleasedWhenClosed = false
@@ -310,6 +330,7 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
         let p = NSPanel(contentRect: NSRect(origin: .zero, size: size),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = false
+        p.appearance = NSAppearance(named: .darkAqua)   // the orb looks the same in every mode
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         p.isReleasedWhenClosed = false
@@ -387,6 +408,7 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
 final class SettingsWindow: NSObject, NSTokenFieldDelegate {
     private var window: NSWindow?
     private var popup: NSPopUpButton?
+    private var appearancePopup: NSPopUpButton?
     private var voiceCheck: NSButton?
     private var loginCheck: NSButton?
     private var namesField: NSTokenField?
@@ -401,7 +423,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
             sync()
             return
         }
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 440),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "Nexus Settings"
         w.center()
@@ -410,6 +432,18 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         let content = NSView(frame: w.contentView!.bounds)
         content.autoresizingMask = [.width, .height]
         var views: [NSView] = []
+
+        // --- Appearance ------------------------------------------------------
+        views.append(label("🎨 Appearance", frame: NSRect(x: 24, y: 500, width: 392, height: 22), size: 15, bold: true))
+        let appHint = label("Changes at once. System switches with macOS (Settings › Appearance, Auto included).",
+                            frame: NSRect(x: 24, y: 480, width: 392, height: 16), size: 11, bold: false)
+        appHint.textColor = .secondaryLabelColor
+        views.append(appHint)
+        let ap = NSPopUpButton(frame: NSRect(x: 24, y: 446, width: 392, height: 28))
+        for a in Settings.appearances { ap.addItem(withTitle: a.label) }
+        ap.target = self; ap.action = #selector(pickAppearance(_:))
+        appearancePopup = ap; views.append(ap)
+        views.append(separator(y: 432))
 
         // --- Dashboard style -------------------------------------------------
         views.append(label("Dashboard Style", frame: NSRect(x: 24, y: 400, width: 392, height: 22), size: 15, bold: true))
@@ -477,6 +511,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
 
     private func sync() {
         if let i = STYLES.firstIndex(where: { $0.id == Settings.style }) { popup?.selectItem(at: i) }
+        if let i = Settings.appearances.firstIndex(where: { $0.id == Settings.appearance }) { appearancePopup?.selectItem(at: i) }
         voiceCheck?.state = Settings.voiceEnabled ? .on : .off
         loginCheck?.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         namesField?.objectValue = Settings.wakeNames
@@ -485,6 +520,13 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         for i in 0..<(localePopup?.numberOfItems ?? 0) where (localePopup?.item(at: i)?.representedObject as? String) == loc {
             localePopup?.selectItem(at: i)
         }
+    }
+
+    @objc private func pickAppearance(_ sender: NSPopUpButton) {
+        let i = sender.indexOfSelectedItem
+        guard i >= 0, i < Settings.appearances.count else { return }
+        Settings.appearance = Settings.appearances[i].id
+        Settings.applyAppearance()
     }
 
     @objc private func pickStyle(_ sender: NSPopUpButton) {
@@ -546,6 +588,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var appMenus: [AppMenuDelegate] = []    // NSMenu holds its delegate weakly
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        Settings.applyAppearance()   // before any window opens
         NexusHome.ensure()
         let menu = NSMenu()
         menu.delegate = self
@@ -687,6 +730,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         styleItem.submenu = styleMenu
         menu.addItem(styleItem)
 
+        // 🎨 Appearance ▸ — System / Light / Dark, applied at once.
+        let appearItem = NSMenuItem(title: "🎨 Appearance", action: nil, keyEquivalent: "")
+        let appearMenu = NSMenu()
+        for a in Settings.appearances {
+            let mi = NSMenuItem(title: a.label, action: #selector(pickAppearance(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = a.id
+            mi.state = (Settings.appearance == a.id) ? .on : .off
+            appearMenu.addItem(mi)
+        }
+        appearItem.submenu = appearMenu
+        menu.addItem(appearItem)
+
         add(menu, "Rebuild All", #selector(rebuildAll))
         add(menu, "Refresh Now", #selector(refreshNow))
 
@@ -820,6 +876,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? String else { return }
         Settings.style = id
         dashboard.push()
+    }
+    @objc func pickAppearance(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, Settings.appearances.contains(where: { $0.id == id }) else { return }
+        Settings.appearance = id
+        Settings.applyAppearance()
     }
     @objc func openSettings() { settingsWindow.show() }
 

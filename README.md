@@ -94,6 +94,9 @@ a visualisation from the menu-bar **Dashboard Style** submenu or the in-window p
 Spatial views share one orbit camera: **drag** to orbit, **wheel** to zoom, **⇧-drag / right-drag**
 to pan, and **Reset view** to recenter.
 
+**🎨 Appearance** (menu or Settings) switches the app between **System**, **Light** and **Dark**
+at once; System follows macOS. The voice orb looks the same in every mode.
+
 ### Teams
 
 Nexus groups the fleet into **teams** by where each app's code is published. It reads the `origin`
