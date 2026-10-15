@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.2 — 2026-10-15
+
+- **Sharper small icons.** At 16–64 px the app icon's drop shadow filled the whole image, leaving a faint grey
+  square behind it in Finder lists, Spotlight and the menu. Every size is now shrunk from the full-size drawing,
+  so the shadow keeps its proportions and the corners stay clear. The icon itself is unchanged.
+
 ## 1.9.1 — 2026-10-15
 
 - **Settings window fixed.** In 1.9.0 the cards had no height, so the window opened short with every

@@ -81,7 +81,7 @@ func drawIcon(in ctx: CGContext) {
     ctx.restoreGState()   // end tile clip
 }
 
-func render(_ px: Int) -> Data {
+func renderFull(_ px: Int) -> Data {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -93,6 +93,24 @@ func render(_ px: Int) -> Data {
     NSGraphicsContext.current = g
     drawIcon(in: ctx)
     NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])!
+}
+
+// Every size is shrunk from one full-size drawing. Shadow and glow blur are measured in device pixels, so
+// drawing straight at 16–64 px let them spill over the whole image as a faint grey square.
+enum Full {
+    static let png = renderFull(1024)
+    static let image = NSBitmapImageRep(data: png)!.cgImage!
+}
+
+func render(_ px: Int) -> Data {
+    if px == Full.image.width { return Full.png }
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+                               samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+    ctx.interpolationQuality = .high
+    ctx.draw(Full.image, in: CGRect(x: 0, y: 0, width: px, height: px))
     return rep.representation(using: .png, properties: [:])!
 }
 
