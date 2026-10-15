@@ -403,16 +403,101 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
 
 // MARK: - Settings window
 
-/// A panel for the dashboard style plus voice control: the wake words Nexus answers to,
-/// the recognition accent, and launch-at-login. Mirrors the menu-bar toggles.
+/// A small clickable preview of one appearance (System / Light / Dark), drawn natively.
+final class AppearanceCard: NSView {
+    let id: String
+    var selected = false { didSet { needsDisplay = true; setAccessibilityValue(selected ? "selected" : "not selected") } }
+    var onPick: ((String) -> Void)?
+    private let title: String
+
+    init(id: String, title: String) {
+        self.id = id; self.title = title
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 98).isActive = true
+        setAccessibilityRole(.radioButton)
+        setAccessibilityLabel(title)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onPick?(id) }
+    override func accessibilityPerformPress() -> Bool { onPick?(id); return true }
+
+    private static func ink(_ dark: Bool) -> (bg: NSColor, bar: NSColor, card: NSColor, line: NSColor) {
+        dark ? (NSColor(srgbRed: 0.055, green: 0.075, blue: 0.133, alpha: 1), NSColor(srgbRed: 0.15, green: 0.18, blue: 0.27, alpha: 1),
+                NSColor(srgbRed: 0.09, green: 0.12, blue: 0.19, alpha: 1), NSColor(srgbRed: 0.55, green: 0.58, blue: 0.66, alpha: 1))
+             : (NSColor(srgbRed: 0.925, green: 0.937, blue: 0.965, alpha: 1), NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
+                NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1), NSColor(srgbRed: 0.30, green: 0.34, blue: 0.42, alpha: 1))
+    }
+
+    private func drawMini(in r: NSRect, dark: Bool) {
+        let c = AppearanceCard.ink(dark)
+        c.bg.setFill(); r.fill()
+        c.bar.setFill(); NSRect(x: r.minX, y: r.maxY - 12, width: r.width, height: 12).fill()
+        NSColor.systemRed.withAlphaComponent(0.85).setFill()
+        NSBezierPath(ovalIn: NSRect(x: r.minX + 6, y: r.maxY - 8.5, width: 5, height: 5)).fill()
+        for i in 0..<2 {
+            let y = r.maxY - 18 - CGFloat(i + 1) * 17
+            c.card.setFill()
+            let card = NSBezierPath(roundedRect: NSRect(x: r.minX + 8, y: y, width: r.width - 16, height: 13), xRadius: 3, yRadius: 3)
+            card.fill()
+            c.line.withAlphaComponent(0.5).setFill()
+            NSRect(x: r.minX + 13, y: y + 5.5, width: (r.width - 26) * (i == 0 ? 0.55 : 0.4), height: 2.5).fill()
+            (i == 0 ? NSColor.systemGreen : NSColor.systemOrange).setFill()
+            NSBezierPath(ovalIn: NSRect(x: r.maxX - 19, y: y + 4, width: 5, height: 5)).fill()
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let preview = NSRect(x: 0, y: 24, width: bounds.width, height: bounds.height - 24).insetBy(dx: 2, dy: 2)
+        let path = NSBezierPath(roundedRect: preview, xRadius: 9, yRadius: 9)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        if id == "system" {
+            // half light, half dark, split down the middle
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: NSRect(x: preview.minX, y: preview.minY, width: preview.width / 2, height: preview.height)).addClip()
+            drawMini(in: preview, dark: false)
+            NSGraphicsContext.restoreGraphicsState()
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: NSRect(x: preview.midX, y: preview.minY, width: preview.width / 2, height: preview.height)).addClip()
+            drawMini(in: preview, dark: true)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            drawMini(in: preview, dark: id == "dark")
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        (selected ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
+        path.lineWidth = selected ? 2.5 : 1
+        path.stroke()
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: selected ? NSFont.boldSystemFont(ofSize: 12) : NSFont.systemFont(ofSize: 12),
+            .foregroundColor: NSColor.labelColor]
+        let size = (title as NSString).size(withAttributes: attrs)
+        (title as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: 3), withAttributes: attrs)
+    }
+}
+
+/// Settings: grouped cards of rows (label and description on the left, control on the right).
+/// Every change applies at once and shows "Saved". Mirrors the menu-bar toggles.
 final class SettingsWindow: NSObject, NSTokenFieldDelegate {
+    private static let width: CGFloat = 520
+    private static let pad: CGFloat = 20
+    private static let inner: CGFloat = width - 2 * pad - 2 * 16   // text width inside a card
+
     private var window: NSWindow?
     private var popup: NSPopUpButton?
-    private var appearancePopup: NSPopUpButton?
-    private var voiceCheck: NSButton?
-    private var loginCheck: NSButton?
+    private var appearanceCards: [AppearanceCard] = []
+    private var voiceCheck: NSSwitch?
+    private var loginCheck: NSSwitch?
     private var namesField: NSTokenField?
     private var localePopup: NSPopUpButton?
+    private var savedLabel: NSTextField?
+    private var savedToken = 0
     var onChange: (() -> Void)?        // dashboard style changed
     var onVoiceChange: (() -> Void)?   // voice enabled / wake names / locale changed
 
@@ -423,63 +508,68 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
             sync()
             return
         }
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsWindow.width, height: 600),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "\(Edition.name) Settings"
-        w.center()
         w.isReleasedWhenClosed = false
+        w.backgroundColor = .underPageBackgroundColor
 
-        let content = NSView(frame: w.contentView!.bounds)
-        content.autoresizingMask = [.width, .height]
-        var views: [NSView] = []
+        let root = NSStackView()
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 8
+        root.edgeInsets = NSEdgeInsets(top: 18, left: SettingsWindow.pad, bottom: 20, right: SettingsWindow.pad)
+        root.translatesAutoresizingMaskIntoConstraints = false
+        root.widthAnchor.constraint(equalToConstant: SettingsWindow.width).isActive = true
+
+        // Brand header: app icon, name, version — and the "Saved" note on the right.
+        root.addArrangedSubview(header())
+        root.setCustomSpacing(14, after: root.arrangedSubviews.last!)
 
         // --- Appearance ------------------------------------------------------
-        views.append(label("🎨 Appearance", frame: NSRect(x: 24, y: 500, width: 392, height: 22), size: 15, bold: true))
-        let appHint = label("Changes at once. System switches with macOS (Settings › Appearance, Auto included).",
-                            frame: NSRect(x: 24, y: 480, width: 392, height: 16), size: 11, bold: false)
-        appHint.textColor = .secondaryLabelColor
-        views.append(appHint)
-        let ap = NSPopUpButton(frame: NSRect(x: 24, y: 446, width: 392, height: 28))
-        for a in Settings.appearances { ap.addItem(withTitle: a.label) }
-        ap.target = self; ap.action = #selector(pickAppearance(_:))
-        appearancePopup = ap; views.append(ap)
-        views.append(separator(y: 432))
+        root.addArrangedSubview(sectionTitle("Appearance"))
+        let cardsRow = NSStackView()
+        cardsRow.orientation = .horizontal
+        cardsRow.distribution = .fillEqually
+        cardsRow.spacing = 12
+        for a in Settings.appearances {
+            let c = AppearanceCard(id: a.id, title: a.label)
+            c.onPick = { [weak self] id in self?.pickAppearance(id) }
+            appearanceCards.append(c)
+            cardsRow.addArrangedSubview(c)
+        }
+        let appBlock = group([
+            textBlock(title: "Look", desc: "Changes at once. System follows macOS (Auto included)."),
+            cardsRow,
+        ])
+        cardsRow.widthAnchor.constraint(equalToConstant: SettingsWindow.inner).isActive = true
+        root.addArrangedSubview(appBlock)
 
-        // --- Dashboard style -------------------------------------------------
-        views.append(label("Dashboard Style", frame: NSRect(x: 24, y: 400, width: 392, height: 22), size: 15, bold: true))
-        let styleHint = label("How the fleet is visualised in the dashboard window.",
-                              frame: NSRect(x: 24, y: 380, width: 392, height: 16), size: 11, bold: false)
-        styleHint.textColor = .secondaryLabelColor
-        views.append(styleHint)
-
-        let pop = NSPopUpButton(frame: NSRect(x: 24, y: 346, width: 392, height: 28))
+        // --- Dashboard -------------------------------------------------------
+        root.addArrangedSubview(sectionTitle("Dashboard"))
+        let pop = NSPopUpButton(frame: .zero)
         for s in STYLES { pop.addItem(withTitle: s.label) }
         pop.target = self; pop.action = #selector(pickStyle(_:))
-        popup = pop; views.append(pop)
+        popup = pop
+        root.addArrangedSubview(group([
+            row("Style", "How the fleet is visualised in the dashboard window.", pop, controlWidth: 180),
+        ]))
 
         // --- Voice control ---------------------------------------------------
-        views.append(separator(y: 326))
-        views.append(label("Voice Control", frame: NSRect(x: 24, y: 292, width: 392, height: 22), size: 15, bold: true))
+        root.addArrangedSubview(sectionTitle("Voice control"))
+        let vc = NSSwitch()
+        vc.target = self; vc.action = #selector(toggleVoice(_:))
+        voiceCheck = vc
 
-        let vc = NSButton(checkboxWithTitle: "  Listen for the wake word and run spoken commands",
-                          target: self, action: #selector(toggleVoice(_:)))
-        vc.frame = NSRect(x: 24, y: 262, width: 392, height: 22)
-        voiceCheck = vc; views.append(vc)
-
-        views.append(label("Wake words", frame: NSRect(x: 24, y: 230, width: 392, height: 18), size: 12, bold: true))
-        let namesHint = label("Say any of these to get \(Edition.name)'s attention. Add your own — press return after each.",
-                              frame: NSRect(x: 24, y: 212, width: 392, height: 16), size: 11, bold: false)
-        namesHint.textColor = .secondaryLabelColor
-        views.append(namesHint)
-
-        let names = NSTokenField(frame: NSRect(x: 24, y: 178, width: 392, height: 26))
+        let names = NSTokenField(frame: .zero)
         names.tokenizingCharacterSet = CharacterSet(charactersIn: ",\n")
         names.delegate = self
         names.target = self; names.action = #selector(commitNames(_:))
-        namesField = names; views.append(names)
+        names.translatesAutoresizingMaskIntoConstraints = false
+        names.widthAnchor.constraint(equalToConstant: SettingsWindow.inner).isActive = true
+        namesField = names
 
-        views.append(label("Recognition accent", frame: NSRect(x: 24, y: 146, width: 392, height: 18), size: 12, bold: true))
-        let lp = NSPopUpButton(frame: NSRect(x: 24, y: 112, width: 392, height: 28))
+        let lp = NSPopUpButton(frame: .zero)
         lp.addItem(withTitle: "Automatic")
         lp.item(at: 0)?.representedObject = ""
         for (id, name) in Ears.accents {
@@ -487,31 +577,141 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
             lp.item(at: lp.numberOfItems - 1)?.representedObject = id
         }
         lp.target = self; lp.action = #selector(pickLocale(_:))
-        localePopup = lp; views.append(lp)
+        localePopup = lp
 
-        // --- Launch at login -------------------------------------------------
-        views.append(separator(y: 92))
-        let login = NSButton(checkboxWithTitle: "  Launch \(Edition.name) at login",
-                             target: self, action: #selector(toggleLogin(_:)))
-        login.frame = NSRect(x: 24, y: 58, width: 392, height: 22)
-        loginCheck = login; views.append(login)
+        root.addArrangedSubview(group([
+            row("Listen for the wake word", "Run spoken commands to control your agents.", vc, controlWidth: 40),
+            textBlock(title: "Wake words", desc: "Say any of these to get \(Edition.name)'s attention. Add your own — press return after each."),
+            names,
+            row("Recognition accent", "The accent used to understand your speech.", lp, controlWidth: 180),
+        ]))
 
-        let loginNote = label("\(Edition.name) wakes the other agents on command, so only \(Edition.name) needs a login item.",
-                              frame: NSRect(x: 44, y: 36, width: 372, height: 16), size: 11, bold: false)
-        loginNote.textColor = .tertiaryLabelColor
-        views.append(loginNote)
+        // --- General ---------------------------------------------------------
+        root.addArrangedSubview(sectionTitle("General"))
+        let login = NSSwitch()
+        login.target = self; login.action = #selector(toggleLogin(_:))
+        loginCheck = login
+        root.addArrangedSubview(group([
+            row("Launch \(Edition.name) at login",
+                "\(Edition.name) wakes the other agents on command, so only \(Edition.name) needs a login item.", login, controlWidth: 40),
+        ]))
 
-        for v in views { content.addSubview(v) }
-        w.contentView = content
+        w.contentView = root
+        root.layoutSubtreeIfNeeded()
+        w.setContentSize(root.fittingSize)
+        w.center()
         window = w
         sync()
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }
 
+    // MARK: Building blocks
+
+    private func header() -> NSView {
+        let icon = NSImageView(image: NSApp.applicationIconImage)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.widthAnchor.constraint(equalToConstant: 36).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        let name = NSTextField(labelWithString: Edition.name)
+        name.font = .boldSystemFont(ofSize: 20)
+        let ver = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+        let sub = NSTextField(labelWithString: ver.isEmpty ? "Settings" : "Settings · v\(ver)")
+        sub.font = .systemFont(ofSize: 12)
+        sub.textColor = .secondaryLabelColor
+        let titles = NSStackView(views: [name, sub])
+        titles.orientation = .vertical; titles.alignment = .leading; titles.spacing = 0
+        let saved = NSTextField(labelWithString: "Saved ✓")
+        saved.font = .systemFont(ofSize: 12, weight: .medium)
+        saved.textColor = .systemGreen
+        saved.alphaValue = 0
+        savedLabel = saved
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let h = NSStackView(views: [icon, titles, spacer, saved])
+        h.orientation = .horizontal; h.alignment = .centerY; h.spacing = 10
+        h.translatesAutoresizingMaskIntoConstraints = false
+        h.widthAnchor.constraint(equalToConstant: SettingsWindow.width - 2 * SettingsWindow.pad).isActive = true
+        return h
+    }
+
+    private func sectionTitle(_ text: String) -> NSView {
+        let l = NSTextField(labelWithString: text.uppercased())
+        l.font = .systemFont(ofSize: 11, weight: .semibold)
+        l.textColor = .secondaryLabelColor
+        let box = NSStackView(views: [l])
+        box.edgeInsets = NSEdgeInsets(top: 8, left: 4, bottom: 0, right: 0)
+        return box
+    }
+
+    /// A rounded card holding rows, with hairline separators between them.
+    private func group(_ rows: [NSView]) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        for r in rows { stack.addArrangedSubview(r) }
+        let box = NSBox()
+        box.boxType = .custom
+        box.cornerRadius = 10
+        box.borderWidth = 1
+        box.borderColor = .separatorColor
+        box.fillColor = .controlBackgroundColor
+        box.titlePosition = .noTitle
+        box.contentViewMargins = .zero
+        box.contentView = stack
+        box.translatesAutoresizingMaskIntoConstraints = false
+        box.widthAnchor.constraint(equalToConstant: SettingsWindow.width - 2 * SettingsWindow.pad).isActive = true
+        return box
+    }
+
+    /// Wrapping title + description, sized to its content (never clipped).
+    private func textBlock(title: String, desc: String, width: CGFloat = SettingsWindow.inner) -> NSView {
+        let t = NSTextField(labelWithString: title)
+        t.font = .systemFont(ofSize: 13, weight: .medium)
+        let d = NSTextField(wrappingLabelWithString: desc)
+        d.font = .systemFont(ofSize: 11.5)
+        d.textColor = .secondaryLabelColor
+        d.preferredMaxLayoutWidth = width
+        d.translatesAutoresizingMaskIntoConstraints = false
+        d.widthAnchor.constraint(equalToConstant: width).isActive = true
+        let s = NSStackView(views: [t, d])
+        s.orientation = .vertical; s.alignment = .leading; s.spacing = 2
+        return s
+    }
+
+    /// Label and description on the left, control on the right.
+    private func row(_ title: String, _ desc: String, _ control: NSView, controlWidth: CGFloat) -> NSView {
+        let gap: CGFloat = 16
+        let text = textBlock(title: title, desc: desc, width: SettingsWindow.inner - controlWidth - gap)
+        control.translatesAutoresizingMaskIntoConstraints = false
+        control.widthAnchor.constraint(equalToConstant: controlWidth).isActive = true
+        let r = NSStackView(views: [text, control])
+        r.orientation = .horizontal; r.alignment = .centerY; r.spacing = gap
+        r.distribution = .fill
+        r.translatesAutoresizingMaskIntoConstraints = false
+        r.widthAnchor.constraint(equalToConstant: SettingsWindow.inner).isActive = true
+        return r
+    }
+
+    private func flashSaved() {
+        guard let l = savedLabel else { return }
+        savedToken += 1
+        let token = savedToken
+        l.alphaValue = 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self, weak l] in
+            guard let self, self.savedToken == token else { return }
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.3; l?.animator().alphaValue = 0 }
+        }
+    }
+
+    // MARK: State
+
     private func sync() {
         if let i = STYLES.firstIndex(where: { $0.id == Settings.style }) { popup?.selectItem(at: i) }
-        if let i = Settings.appearances.firstIndex(where: { $0.id == Settings.appearance }) { appearancePopup?.selectItem(at: i) }
+        for c in appearanceCards { c.selected = (c.id == Settings.appearance) }
         voiceCheck?.state = Settings.voiceEnabled ? .on : .off
         loginCheck?.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         namesField?.objectValue = Settings.wakeNames
@@ -522,11 +722,12 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         }
     }
 
-    @objc private func pickAppearance(_ sender: NSPopUpButton) {
-        let i = sender.indexOfSelectedItem
-        guard i >= 0, i < Settings.appearances.count else { return }
-        Settings.appearance = Settings.appearances[i].id
+    private func pickAppearance(_ id: String) {
+        guard Settings.appearances.contains(where: { $0.id == id }) else { return }
+        Settings.appearance = id
         Settings.applyAppearance()
+        for c in appearanceCards { c.selected = (c.id == id) }
+        flashSaved()
     }
 
     @objc private func pickStyle(_ sender: NSPopUpButton) {
@@ -534,18 +735,21 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         guard i >= 0, i < STYLES.count else { return }
         Settings.style = STYLES[i].id
         onChange?()
+        flashSaved()
     }
 
-    @objc private func toggleVoice(_ sender: NSButton) {
+    @objc private func toggleVoice(_ sender: NSSwitch) {
         Settings.voiceEnabled = sender.state == .on
         onVoiceChange?()
+        flashSaved()
     }
 
-    @objc private func toggleLogin(_ sender: NSButton) {
+    @objc private func toggleLogin(_ sender: NSSwitch) {
         let svc = SMAppService.mainApp
         do { svc.status == .enabled ? try svc.unregister() : try svc.register() }
         catch { NSLog("\(Edition.name): launch at login: \(error)") }
         sender.state = (svc.status == .enabled) ? .on : .off
+        flashSaved()
     }
 
     @objc private func commitNames(_ sender: NSTokenField) {
@@ -553,25 +757,14 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         Settings.wakeNames = names
         namesField?.objectValue = Settings.wakeNames   // reflect the cleaned/defaulted list
         onVoiceChange?()
+        flashSaved()
     }
 
     @objc private func pickLocale(_ sender: NSPopUpButton) {
         let id = (sender.selectedItem?.representedObject as? String) ?? ""
         Settings.speechLocale = id.isEmpty ? nil : id
         onVoiceChange?()
-    }
-
-    private func separator(y: CGFloat) -> NSBox {
-        let box = NSBox(frame: NSRect(x: 24, y: y, width: 392, height: 1))
-        box.boxType = .separator
-        return box
-    }
-
-    private func label(_ text: String, frame: NSRect, size: CGFloat, bold: Bool) -> NSTextField {
-        let l = NSTextField(labelWithString: text)
-        l.frame = frame
-        l.font = bold ? .boldSystemFont(ofSize: size) : .systemFont(ofSize: size)
-        return l
+        flashSaved()
     }
 }
 

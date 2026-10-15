@@ -33,11 +33,12 @@
     --term-bg:rgba(6,10,18,.92); --term-bar:#0c1322;
     --card1:#121a2c; --card2:#0d1320;
     --pop:rgba(17,20,30,.96);
+    --plate-bg:rgba(10,15,27,.72); --plate-edge:rgba(120,150,200,.12);
     --alt:1.12; --alt-op:1.18; --darken:0%;                   /* how far status colours are darkened when used as text */
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg0:#eceff6; --bg1:#f6f8fc; --text:#1a2033; --dim:#5d667c; --line:#d2d9e6; --line-h:#a9b3c9;
+      --bg0:#eceff6; --bg1:#f6f8fc; --text:#1a2033; --dim:#4d566c; --line:#d2d9e6; --line-h:#a9b3c9;
       --green:#169a52; --amber:#b97400; --red:#d42b3d; --blue:#2169d6; --grey:#7b8496;
       --floor:#e3e9f4; --floor2:#d3dbeb;
       --brgb:36 108 220;
@@ -63,6 +64,7 @@
       --term-bg:rgba(252,253,255,.96); --term-bar:#e8ecf5;
       --card1:#ffffff; --card2:#f4f6fb;
       --pop:rgba(255,255,255,.97);
+      --plate-bg:rgba(255,255,255,.82); --plate-edge:rgba(60,90,150,.14);
       --alt:1.025; --alt-op:1.03;
       --darken:34%;
     }
@@ -269,8 +271,14 @@
   @keyframes opspin2{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
   .pod .bars{ position:absolute; left:-15px; top:-10px; width:30px; height:12px; display:flex; align-items:flex-end; gap:2px }
   .pod .bars i{ flex:1; background:var(--c); opacity:.6; height:30%; border-radius:1px }
-  .pod .plate{ position:absolute; left:-62px; top:16px; width:124px; text-align:center }
-  .pod .plate b{ font-size:11.5px } .pod .plate span{ display:block; font-size:9.5px; color:var(--dim) }
+  .pod .plate{ position:absolute; left:-56px; top:16px; width:112px; text-align:center; padding:2px 6px 3px;
+    border-radius:7px; background:var(--plate-bg); box-shadow:0 1px 0 var(--plate-edge) }
+  .pod .plate b,.pod .plate span{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .pod .plate b{ font-size:11.5px } .pod .plate span{ font-size:10px; color:var(--dim) }
+  /* labels sit above every tower/halo so a neighbouring pod never covers them: pods lose their own stacking layer, each part takes the depth in --z */
+  .pod{ z-index:auto !important } .pod > *{ z-index:var(--z,0) } .pod .plate{ z-index:calc(var(--z,0) + 10000000) }
+  .pod .plate em{ font-style:normal }
+  .dense .pod .plate em.ver{ display:none }   /* 10+ apps: keep labels short so they don't collide (version stays in the popover) */
   .pod:hover .base{ outline-color:color-mix(in srgb,var(--c) 70%,transparent) }
   .pod:hover .tower{ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 55%,transparent), 0 10px 24px var(--sh-xl) }
   .packet{ position:absolute; width:5px;height:5px;border-radius:50%; margin:-2.5px 0 0 -2.5px; pointer-events:none; z-index:45;
@@ -418,6 +426,10 @@ function send(action, id){ window.webkit?.messageHandlers?.nexus?.postMessage({a
 function elt(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 function cssid(s){ return String(s).replace(/"/g,'\\"'); }
+/* display labels for status keys — keys stay as-is in the data */
+const STATUS_LABEL={running:"Running",ok:"Running",warn:"Warning",error:"Error",crashed:"Crashed",stale:"Not responding",needsBuild:"Needs rebuild",building:"Building…",idle:"Idle",notBuilt:"Not built",offline:"Offline"};
+function det(a){ const d=a.detail||""; return STATUS_LABEL[d] || d; }
+function stat(a){ const raw=a.status; return STATUS_LABEL[a.key] || STATUS_LABEL[raw] || raw || ""; }
 function esc(s){ return String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* ------------- shared orbit camera (used by spatial views) ------------- */
@@ -518,7 +530,7 @@ const Office = {
          <div class="logs"><i style="width:70%"></i><i style="width:45%"></i><i style="width:85%"></i><i style="width:30%"></i></div>
          <div class="bar"></div></div><div class="stand"></div><div class="foot"></div></div>
       <div class="chair"></div>
-      <div class="plate"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+      <div class="plate"><b>${esc(a.name)}</b><span>${esc(stat(a))}</span></div>`;
     el.addEventListener("click", e=>{ e.stopPropagation(); openPop(a, el); });
     return el;
   },
@@ -537,7 +549,7 @@ const Office = {
       let cube=this.world.querySelector(`.cube[data-id="${cssid(a.id)}"]`);
       if(!cube){ cube=this.cubicleEl(a); this.world.appendChild(cube); }
       else { cube.className="cube node "+a.key; cube.style.setProperty("--c",a.color);
-        cube.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+        cube.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(stat(a))}</span>`; }
       cube._app=a; this.placeNode(cube,lc);
       let ag=this.agents[a.id];
       if(!ag){ const el=this.agentEl(a); this.world.appendChild(el);
@@ -603,7 +615,8 @@ const Opcenter = {
     this.floor=this.world.querySelector("#opfloor");
   },
   teardown(){ this.world?.remove(); this.world=null; this.pods={}; },
-  radius(n){ return Math.max(3.2, 2.2 + n*0.42); },
+  /* a little wider once the ring fills up, so pod labels don't collide */
+  radius(n){ return Math.max(3.2, 2.2 + n*0.42 + Math.max(0, n-8)*0.2); },
   bounds(){ const R=this.radius(this.apps.length); return {min:{x:-R-1.5,y:-R-1.5}, max:{x:R+1.5,y:R+2.5}}; },
   buildFloor(){ const b=this.bounds(); this.floor.innerHTML="";
     for(let gy=Math.floor(b.min.y); gy<=Math.ceil(b.max.y); gy++)
@@ -617,7 +630,7 @@ const Opcenter = {
       <div class="tower"><div class="scan"><i style="width:80%"></i><i style="width:55%"></i><i style="width:70%"></i><i style="width:40%"></i></div></div>
       <div class="halo"></div><div class="core"></div>
       <div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
-      <div class="plate"><b>${esc(a.name)}</b><span>${esc(a.status)} · v${esc(a.version)}</span></div>`;
+      <div class="plate"><b>${esc(a.name)}</b><span>${esc(stat(a))}<em class="ver"> · v${esc(a.version)}</em></span></div>`;
     el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a, el); });
     return el;
   },
@@ -625,6 +638,7 @@ const Opcenter = {
   flow(key){ return {running:1,ok:1,warn:.8,building:1,needsBuild:.5,stale:.3,error:.9,crashed:0,idle:.18,notBuilt:0}[key] ?? .4; },
   update(payload){
     const apps=payload.apps||[]; this.apps=apps; this.buildFloor();
+    this.world.classList.toggle("dense", apps.length>=10);
     const seen=new Set();
     apps.forEach(a=>{ seen.add(a.id);
       let pd=this.pods[a.id];
@@ -634,7 +648,7 @@ const Opcenter = {
         const packets=[]; for(let i=0;i<3;i++){ const c=elt("div","packet"); this.world.appendChild(c); packets.push(c); }
         pd=this.pods[a.id]={ el, line, packets, phase:Math.random()*Math.PI*2, speed:0.1+Math.random()*0.06, off:Math.random() };
       } else { pd.el.className="pod node "+a.key; pd.el.style.setProperty("--c",a.color);
-        pd.el.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)} · v${esc(a.version)}</span>`; }
+        pd.el.querySelector(".plate").innerHTML=`<b>${esc(a.name)}</b><span>${esc(stat(a))}<em class="ver"> · v${esc(a.version)}</em></span>`; }
       pd.el.style.setProperty("--c",a.color); pd.app=a;
     });
     for(const id in this.pods){ if(!seen.has(id)){ const pd=this.pods[id];
@@ -649,7 +663,7 @@ const Opcenter = {
       const ang=this.angle*0.12 + (i/Math.max(1,n))*Math.PI*2;   // evenly spaced, orbiting together
       const wx=Math.cos(ang)*R, wy=Math.sin(ang)*R; const p=project(wx,wy);
       pd._p=p;
-      pd.el.style.left=p.x+"px"; pd.el.style.top=p.y+"px"; pd.el.style.zIndex=Math.round(100000+p.y*10);
+      pd.el.style.left=p.x+"px"; pd.el.style.top=p.y+"px"; pd.el.style.zIndex=Math.round(100000+p.y*10); pd.el.style.setProperty("--z",Math.round(100000+p.y*10));
       pd.line.setAttribute("x1",c0.x); pd.line.setAttribute("y1",c0.y);
       pd.line.setAttribute("x2",p.x); pd.line.setAttribute("y2",p.y);
       const f=this.flow(pd.app.key);
@@ -707,7 +721,7 @@ const City = {
     const shaft=el.querySelector(".shaft"); shaft.style.height=h+"px"; shaft.style.bottom="0px"; shaft.style.top=(-h)+"px"; const cap=el.querySelector(".cap"); cap.style.top=(-h-6)+"px"; },
   buildingEl(a){ const el=elt("div","building node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
     el.innerHTML=`<div class="base"></div><div class="shaft"><div class="win"></div></div><div class="cap"></div>
-      <div class="tag"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+      <div class="tag"><b>${esc(a.name)}</b><span>${esc(stat(a))}</span></div>`;
     el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,el); }); return el; },
   update(payload){ const apps=payload.apps||[]; this.computeLayout(apps); this.buildGround();
     const seen=new Set();
@@ -715,7 +729,7 @@ const City = {
       let b=this.world.querySelector(`.building[data-id="${cssid(a.id)}"]`);
       if(!b){ b=this.buildingEl(a); this.world.appendChild(b); }
       else { b.className="building node "+a.key; b.style.setProperty("--c",a.color);
-        b.querySelector(".tag").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+        b.querySelector(".tag").innerHTML=`<b>${esc(a.name)}</b><span>${esc(stat(a))}</span>`; }
       b._app=a; this.place(b,t,this.height(a));
     });
     this.world.querySelectorAll(".building").forEach(b=>{ if(!seen.has(b.dataset.id)) b.remove(); });
@@ -745,13 +759,13 @@ const Constellation = {
     apps.forEach(a=>{ seen.add(a.id);
       let nd=this.nodes[a.id];
       if(!nd){ const el=elt("div","cnode node "+a.key); el.style.setProperty("--c",a.color); el.dataset.id=a.id;
-        el.innerHTML=`<div class="halo"></div><div class="planet"></div><div class="nlbl"><b>${esc(a.name)}</b><span>${esc(a.status)}</span></div>`;
+        el.innerHTML=`<div class="halo"></div><div class="planet"></div><div class="nlbl"><b>${esc(a.name)}</b><span>${esc(stat(a))}</span></div>`;
         el.addEventListener("click",e=>{ e.stopPropagation(); openPop(a, el); });
         this.world.appendChild(el);
         const line=document.createElementNS("http://www.w3.org/2000/svg","line"); this.svg.appendChild(line);
         nd=this.nodes[a.id]={ el, line, phase:Math.random()*Math.PI*2, speed:0.12+Math.random()*0.1 };
       } else { nd.el.className="cnode node "+a.key; nd.el.style.setProperty("--c",a.color);
-        nd.el.querySelector(".nlbl").innerHTML=`<b>${esc(a.name)}</b><span>${esc(a.status)}</span>`; }
+        nd.el.querySelector(".nlbl").innerHTML=`<b>${esc(a.name)}</b><span>${esc(stat(a))}</span>`; }
       nd.el.style.setProperty("--c",a.color); nd.app=a;
     });
     for(const id in this.nodes){ if(!seen.has(id)){ this.nodes[id].el.remove(); this.nodes[id].line.remove(); delete this.nodes[id]; } }
@@ -785,13 +799,13 @@ const Noc = {
     apps.forEach(a=>{ const p=elt("div","panel "+a.key); p.style.setProperty("--c",a.color);
       p.innerHTML=`<div class="ph"><span class="pled"></span><span class="pname">${esc(a.name)}</span><span class="pkind">${esc(a.kind)}</span></div>
         <div class="scope"><div class="wave"></div><div class="sweep"></div></div>
-        <div class="pstat"><span>${esc(a.status)}</span><b>v${esc(a.version)}</b></div>
-        <div class="pstat"><span class="d">${esc(a.detail||"")}</span></div>`;
+        <div class="pstat"><span>${esc(stat(a))}</span><b>v${esc(a.version)}</b></div>
+        <div class="pstat"><span class="d">${esc(det(a))}</span></div>`;
       p.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,p); }); wall.appendChild(p);
     });
     const bad=apps.filter(a=>["error","crashed","warn","stale","needsBuild"].includes(a.key));
-    const line = bad.length ? bad.map(a=>`${a.name}: ${a.status}${a.detail?" ("+a.detail+")":""}`).join("   •   ")
-                            : "ALL SYSTEMS NOMINAL   •   "+apps.map(a=>a.name+" "+a.status).join("   •   ");
+    const line = bad.length ? bad.map(a=>`${a.name}: ${stat(a)}${a.detail?" ("+det(a)+")":""}`).join("   •   ")
+                            : "ALL SYSTEMS NOMINAL   •   "+apps.map(a=>a.name+" "+stat(a)).join("   •   ");
     this.root.querySelector(".noc-ticker span").textContent = "  "+line+"  ";
   },
   tick(){}
@@ -818,8 +832,8 @@ const Terminal = {
     out+=`<span class="d">${run} of ${apps.length} agents on duty · ${new Date().toLocaleTimeString()}</span>\n\n`;
     out+=`<span class="d">${pad("AGENT",16)}${pad("STATUS",16)}${pad("VER",9)}ACTIVITY</span>\n`;
     apps.forEach(a=>{ const c=this.cls(a.key); const dot=a.key==="running"||a.key==="ok"?"●":a.key==="crashed"||a.key==="error"?"✖":a.key==="idle"||a.key==="notBuilt"?"○":"◐";
-      out+=`<span class="${c}">${dot}</span> ${pad(esc(a.name),14)}<span class="${c}">${pad(esc(a.status),16)}</span><span class="d">${pad("v"+esc(a.version),9)}</span><span class="${c}">${this.spark(a.key)}</span>\n`;
-      if(a.detail) out+=`  <span class="d">↳ ${esc(a.detail)}</span>\n`;
+      out+=`<span class="${c}">${dot}</span> ${pad(esc(a.name),14)}<span class="${c}">${pad(esc(stat(a)),16)}</span><span class="d">${pad("v"+esc(a.version),9)}</span><span class="${c}">${this.spark(a.key)}</span>\n`;
+      if(a.detail) out+=`  <span class="d">↳ ${esc(det(a))}</span>\n`;
     });
     out+=`\n<span class="d">${cmd}@fleet</span> <span class="b">~</span> % <span class="cursor"></span>`;
     body.innerHTML=out;
@@ -843,8 +857,8 @@ const Grid = {
         const h=elt("div","cteam"); h.innerHTML=`${esc(a.head)}<span>${up}/${n.length} running</span>`; wrap.appendChild(h); return; }
       const c=elt("div","card "+a.key); c.style.setProperty("--c",a.color);
       c.innerHTML=`<div class="ch"><span class="cdot"></span><span class="cname">${esc(a.name)}</span><span class="ckind">${esc(a.kind)}</span></div>
-        <div class="cstat"><b>${esc(a.status)}</b></div>
-        <div class="cmeta">${esc(a.detail||"")}</div>
+        <div class="cstat"><b>${esc(stat(a))}</b></div>
+        <div class="cmeta">${esc(det(a))}</div>
         <div class="cver">v${esc(a.version)}</div>`;
       c.addEventListener("click",e=>{ e.stopPropagation(); openPop(a,c); }); wrap.appendChild(c);
     });
@@ -977,7 +991,7 @@ function openPop(a, el){
   btns.push(btn("Reveal","reveal",a.id,false,true));
   pop.innerHTML=`<h3><span class="dot" style="background:${a.color};color:${a.color}"></span>${esc(a.name)}
       <span style="flex:1"></span><span class="kind">${esc(a.team||"")}</span><span class="kind">${esc(a.kind)}</span></h3>
-    <div class="meta">v${esc(a.version)} · ${esc(a.status)}${a.detail?` — ${esc(a.detail)}`:""}</div>
+    <div class="meta">v${esc(a.version)} · ${esc(stat(a))}${a.detail?` — ${esc(det(a))}`:""}</div>
     <div class="meta" style="margin-top:-6px">${esc(a.repo||"")}</div>
     <div class="row">${btns.join("")}</div>`;
   pop.style.display="block";

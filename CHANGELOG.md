@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0 — 2026-10-15
+
+- **Settings, redesigned.** Grouped cards of rows (name and description on the left, control on the
+  right), real switches for Voice Control and Launch at login, and **System / Light / Dark as three
+  preview cards**. Hint text now wraps instead of being clipped, and a "Saved ✓" note confirms each change.
+- **Readable status names.** The dashboard shows "Warning", "Needs rebuild", "Not responding"… instead
+  of raw keys like `warn` or `needsBuild` (the keys themselves are unchanged in the data).
+- **Pod labels no longer collide** with 10+ apps in the Operations Center: labels sit on small chips above
+  every tower, long ones truncate, the ring widens, and the version moves to the popover once it's crowded.
+- Light mode: secondary text is darker (contrast at least 4.5:1 everywhere). The voice orb is unchanged.
+
 ## 1.8.0 — 2026-10-15
 
 - **Nexus is now the personal parent.** It watches apps on public GitHub, apps not on git yet, and

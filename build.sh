@@ -37,8 +37,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.stangudu.nexus</string>
   <key>CFBundleExecutable</key><string>Nexus</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.8.0</string>
-  <key>CFBundleVersion</key><string>7</string>
+  <key>CFBundleShortVersionString</key><string>1.9.0</string>
+  <key>CFBundleVersion</key><string>8</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
