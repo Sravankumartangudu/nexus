@@ -7,21 +7,38 @@
   #cap { font: 500 12px -apple-system, sans-serif; color: #d8f6ff; text-align: center;
          margin: 2px 12px 0; max-height: 48px; overflow: hidden; opacity: 0;
          display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-         text-shadow: 0 0 6px rgba(0,150,255,.9), 0 1px 2px #000; transition: opacity .4s; }
+         text-shadow: 0 0 6px var(--glow, rgba(0,150,255,.9)), 0 1px 2px #000; transition: opacity .4s; }
+  /* The parent's name under the orb, so Nexus's and Citadel's orbs can't be mixed up. */
+  #tag { position: absolute; top: 203px; left: 0; right: 0; text-align: center; pointer-events: none;
+         font: 700 9px -apple-system, sans-serif; letter-spacing: .32em; text-indent: .32em;
+         color: var(--tag, #9fe6ff); opacity: .7; text-shadow: 0 0 5px var(--glow, rgba(0,150,255,.9)), 0 1px 1px #000; }
 </style></head>
 <body>
 <canvas id="c" width="440" height="440"></canvas>
+<div id="tag"></div>
 <div id="cap"></div>
 <script>
 // Nexus orb — the floating face of the fleet's voice control. Ported from Jarvis's orb;
-// states map to Nexus's voice modes. Swift drives it via setState / setStyle / setLevel / setCaption.
+// states map to Nexus's voice modes. Swift drives it via setTheme / setState / setStyle / setLevel /
+// setCaption.
 const g = document.getElementById('c').getContext('2d');
 const cap = document.getElementById('cap');
 const C = 220;   // canvas centre
-const COLORS = {
-  idle: [79, 209, 255], listening: [140, 235, 255], working: [255, 186, 84],
-  speaking: [120, 230, 255], off: [110, 120, 130], error: [255, 90, 90],
+// Each parent app has its own palette and name tag, so two orbs on screen are told apart at a glance:
+// Nexus is cyan, Citadel gold.
+const THEMES = {
+  nexus: {
+    colors: { idle: [79, 209, 255], listening: [140, 235, 255], working: [255, 186, 84],
+              speaking: [120, 230, 255], off: [110, 120, 130], error: [255, 90, 90] },
+    glow: 'rgba(0,150,255,.9)', tag: '#9fe6ff', text: '#d8f6ff',
+  },
+  citadel: {
+    colors: { idle: [245, 182, 66], listening: [255, 214, 130], working: [255, 128, 56],
+              speaking: [255, 205, 110], off: [130, 120, 105], error: [255, 90, 90] },
+    glow: 'rgba(255,150,30,.9)', tag: '#ffd98a', text: '#fff1d6',
+  },
 };
+let COLORS = THEMES.nexus.colors;
 let state = 'idle', style = 'reactor', level = 0, energy = 0, col = COLORS.idle.slice();
 // Live fleet counts, mirrored from the dashboard: one satellite per agent in the `fleet` style,
 // lit for active (running) agents and dimmed for the rest.
@@ -29,6 +46,14 @@ let fleetData = { total: 7, running: 0 };
 const t0 = performance.now();
 
 // Called from Swift.
+function setTheme(name, label) {
+  const th = THEMES[name] || THEMES.nexus;
+  COLORS = th.colors;
+  const root = document.documentElement.style;
+  root.setProperty('--glow', th.glow); root.setProperty('--tag', th.tag);
+  cap.style.color = th.text;
+  document.getElementById('tag').textContent = label || '';
+}
 function setState(s) { state = s; }
 function setStyle(s) { if (STYLES[s]) style = s; }
 function setLevel(l) { level = Math.min(1, l * 14); }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.0 — 2026-10-15
+
+- **Each parent's orb looks its own.** The voice orb now carries its parent's name underneath and its
+  own palette: Nexus stays cyan with a **NEXUS** tag, Citadel is gold with **CITADEL**. Two orbs on
+  screen can no longer be mixed up. Set by the new `Edition.orbTheme`; orb.html has a `setTheme`.
+- Two more `Edition` hooks for the voice brain: `brainModel(_:)` picks its Claude model (Nexus keeps
+  its own setting) and `brainTurnDone(_:)` gets each finished turn's result (cost, tokens). Both do
+  nothing new in Nexus.
+
 ## 1.9.2 — 2026-10-15
 
 - **Sharper small icons.** At 16–64 px the app icon's drop shadow filled the whole image, leaving a faint grey

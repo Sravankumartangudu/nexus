@@ -370,6 +370,7 @@ final class OrbPanel: NSObject, WKNavigationDelegate {
 
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         ready = true
+        js("setTheme('\(Edition.orbTheme)',\(App.jsString(Edition.name.uppercased())))")
         js("setScale(\(Settings.orbScale))")
         js("setStyle('\(Settings.orbStyle)')")
         js("setState('\(state)')")

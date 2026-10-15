@@ -148,7 +148,7 @@ final class Brain {
                     "--disable-slash-commands", "--setting-sources", "project",
                     "--settings", Brain.writeAuthSettings().path,
                     "--append-system-prompt", Brain.persona,
-                    "--model", Settings.brainModel]
+                    "--model", Edition.brainModel(Settings.brainModel)]
         resumed = Settings.brainSessionId != nil
         if let id = Settings.brainSessionId { args += ["--resume", id] }
 
@@ -210,6 +210,7 @@ final class Brain {
             }
         case "result":
             completedTurns += 1
+            Edition.brainTurnDone(event)
             if event["is_error"] as? Bool == true {
                 finish(.failure(Failure(message: (event["result"] as? String) ?? "Claude reported an error.")))
             } else {

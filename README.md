@@ -169,6 +169,10 @@ Extra Large). Choose its look under **Orb Style**, including a **Fleet**
 style whose orbiting satellites mirror the dashboard's agent count (lit = active, dimmed = idle,
 with a live `running / total` readout in the core).
 
+Each parent's orb has its own colours and its name underneath: Nexus's is **cyan** with a **NEXUS**
+tag, Citadel's **gold** with **CITADEL**, so with both running you can always tell which one you're
+talking to.
+
 ### Launch at login
 
 **Launch Nexus at Login** registers Nexus as a login item. Because Nexus can wake the other agents
@@ -271,8 +275,9 @@ The app hides its item only while the folder is on, its parent is running, and t
 
 Nexus and Citadel are the same app with a different `Edition.swift`. That file holds everything that
 makes a parent itself: its name (also the default wake word), bundle id, folder file, menu-bar
-symbol, which teams it watches, and two hooks where its own features plug in (`setUp()` at launch,
-`addMenuItems(to:)` in the menu). Everything else — `main.swift`, `Fleet.swift`, `Voice.swift`,
+symbol, which teams it watches, its orb theme (`orbTheme`), and the hooks where its own features
+plug in (`setUp()` at launch, `addMenuItems(to:)` in the menu, `brainModel(_:)` and
+`brainTurnDone(_:)` for the voice brain's model and each turn's cost). Everything else — `main.swift`, `Fleet.swift`, `Voice.swift`,
 `Brain.swift`, `Folder.swift`, `dashboard.html`, `orb.html` and the beacon — is the shared core.
 
 This repo is the master copy of the core. Citadel lives on the work GitHub and copies the core in

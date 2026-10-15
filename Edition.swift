@@ -19,6 +19,9 @@ enum Edition {
     /// One line for the voice brain: whose apps these are and a few of them by name.
     static let fleetBlurb = "the user's personal apps — Water Buddy, Animi, WheatWise, T-Minus, and others"
 
+    /// The voice orb's palette and look (orb.html `THEMES`): cyan for Nexus.
+    static let orbTheme = "nexus"
+
     /// The teams this parent watches (see `Team`).
     static func watches(_ team: String) -> Bool { team != Team.work }
 
@@ -27,4 +30,10 @@ enum Edition {
 
     /// Adds this edition's own items to the menu-bar menu, just above Settings….
     static func addMenuItems(to menu: NSMenu) {}
+
+    /// The Claude model for the voice brain, given the app's own setting.
+    static func brainModel(_ own: String) -> String { own }
+
+    /// Called with the `result` event of each finished voice-brain turn (cost, tokens, timing).
+    static func brainTurnDone(_ result: [String: Any]) {}
 }
