@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 — 2026-10-15
+
+- **Settings window fixed.** In 1.9.0 the cards had no height, so the window opened short with every
+  section drawn on top of the next. The cards now size to their rows again, and the two switches sit
+  inside their cards instead of hanging over the edge.
+
 ## 1.9.0 — 2026-10-15
 
 - **Settings, redesigned.** Grouped cards of rows (name and description on the left, control on the

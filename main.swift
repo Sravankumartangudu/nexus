@@ -580,7 +580,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         localePopup = lp
 
         root.addArrangedSubview(group([
-            row("Listen for the wake word", "Run spoken commands to control your agents.", vc, controlWidth: 40),
+            row("Listen for the wake word", "Run spoken commands to control your agents.", vc, controlWidth: vc.intrinsicContentSize.width),
             textBlock(title: "Wake words", desc: "Say any of these to get \(Edition.name)'s attention. Add your own — press return after each."),
             names,
             row("Recognition accent", "The accent used to understand your speech.", lp, controlWidth: 180),
@@ -593,7 +593,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         loginCheck = login
         root.addArrangedSubview(group([
             row("Launch \(Edition.name) at login",
-                "\(Edition.name) wakes the other agents on command, so only \(Edition.name) needs a login item.", login, controlWidth: 40),
+                "\(Edition.name) wakes the other agents on command, so only \(Edition.name) needs a login item.", login, controlWidth: login.intrinsicContentSize.width),
         ]))
 
         w.contentView = root
@@ -662,6 +662,13 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         box.titlePosition = .noTitle
         box.contentViewMargins = .zero
         box.contentView = stack
+        // The box doesn't size itself around an auto-layout content view: pin it, or the card has no height.
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: box.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+        ])
         box.translatesAutoresizingMaskIntoConstraints = false
         box.widthAnchor.constraint(equalToConstant: SettingsWindow.width - 2 * SettingsWindow.pad).isActive = true
         return box
