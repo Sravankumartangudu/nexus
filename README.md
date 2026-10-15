@@ -1,12 +1,15 @@
 # Nexus
 
-**The head of the fleet.** A macOS menu-bar app that watches every other app you've built — and
-every one you build in the future — showing a live green/amber/red health status for each, plus a
+**The head of the personal fleet.** A macOS menu-bar app that watches every personal app you've
+built — and every one you build in the future — showing a live green/amber/red health status for each, plus a
 full dashboard window, voice control, and a floating voice orb.
 
-Nexus is the parent of the family: Animi, Jarvis, OrgCS Pulse, Water Buddy, T-Minus,
-and whatever comes next. It owns no app's logic; it just keeps an eye on all of them — and, on a
-spoken command, wakes, opens, stops, or rebuilds any of them for you.
+Nexus is the parent of the personal family: Animi, Water Buddy, WheatWise, T-Minus, and whatever
+comes next. It owns no app's logic; it just keeps an eye on all of them — and, on a spoken command,
+wakes, opens, stops, or rebuilds any of them for you.
+
+Work apps (those on the work GitHub) have their own parent, **Citadel**, built from this same core
+and kept on the work GitHub. See [One core, two parents](#one-core-two-parents).
 
 ---
 
@@ -100,19 +103,20 @@ at once; System follows macOS. The voice orb looks the same in every mode.
 ### Teams
 
 Nexus groups the fleet into **teams** by where each app's code is published. It reads the `origin`
-remote from the app's git repo:
+remote from the app's git repo. Nexus watches every team except **Work**, which belongs to Citadel:
 
 | Team | Repo lives on |
 |---|---|
-| **Work** | the work GitHub (`git.soma.salesforce.com`) |
+| **Work** | the work GitHub (`git.soma.salesforce.com`) — watched by Citadel, not Nexus |
 | **Personal** | public `github.com` |
-| **Local** | not on git yet |
+| **Local** | not on git yet (a new app starts here; add its `origin` remote to move it) |
 | *host name* | any other git host, e.g. `gitlab.com` |
 
 The menu lists apps under a heading for each team, with its running count. Each app's submenu shows
 its team and repo. In the dashboard, the **team picker** (left of the style picker) shows one team
-or all of them. The Status Grid splits into a section per team. Nothing needs configuring: push an
-app to a new remote and it moves to the matching team on the next refresh. To put an app in a
+or all of them. The Status Grid splits into a section per team. Nothing needs configuring: point an
+app at a new remote and it moves to the matching team (and parent) on the next refresh. A new work
+app moves to Citadel as soon as its `origin` is set to the work GitHub — before the first push. To put an app in a
 different team, set `"team"` for it in `~/.nexus/apps.json` (see below).
 
 ### Menu-bar folder
@@ -141,9 +145,10 @@ Enable **Voice Control** from the menu (or Settings). On first use macOS will as
 **Microphone** and **Speech Recognition** permission.
 
 - **Wake word:** say **"Nexus"**. You can add your own names in **Settings → Wake words**.
+  (Citadel answers to **"Citadel"**, so both can listen at once.)
 - **Commands** (after the wake word): open / start / activate / stop / restart / rebuild a named
-  agent — e.g. *"Nexus, open Jarvis"*, *"Nexus, restart OrgCS Pulse"* — or address the whole fleet
-  (*"stop all"*, *"rebuild all"*) or a whole team (*"open work"*, *"stop all personal"*, *"work
+  agent — e.g. *"Nexus, open Animi"*, *"Nexus, restart Water Buddy"* — or address the whole fleet
+  (*"stop all"*, *"rebuild all"*) or a whole team (*"open personal"*, *"stop all local"*, *"personal
   status"*). Ask *"status"* for a spoken fleet report, or *"open dashboard"*.
 
 Speech recognition is on-device where supported; set your **Recognition accent** in Settings for
@@ -254,15 +259,31 @@ Everything goes through files under `~/.nexus/`:
 |---|---|---|
 | `menus/<bundleid>.json` | the app | its menu: entries `{i, t, e, s, k}` (index, title, enabled, checked, submenu) or `{i, sep: true}` |
 | `inbox/<bundleid>/*.json` | Nexus | commands: `{"cmd":"dump"}` (write the menu), `{"cmd":"folder"}` (re-read folder.json), `{"cmd":"perform","path":[…],"title":"…"}` (run an item) |
-| `folder.json` | Nexus | `{"enabled": bool, "shown": [bundleids]}` |
+| `folder.json` | Nexus | `{"enabled": bool, "shown": [bundleids]}` (Citadel keeps its own, `citadel-folder.json`) |
 
-The app hides its item only while the folder is on, Nexus is running, and the app isn't on the
-`shown` list.
+The app hides its item only while the folder is on, its parent is running, and the app isn't on the
+`shown` list. Which parent an app lives under is set by two constants at the top of its copy of
+`NexusBeacon.swift` (`nexusId` and `folderFile`): personal apps keep Nexus's, work apps get Citadel's.
+
+---
+
+## One core, two parents
+
+Nexus and Citadel are the same app with a different `Edition.swift`. That file holds everything that
+makes a parent itself: its name (also the default wake word), bundle id, folder file, menu-bar
+symbol, which teams it watches, and two hooks where its own features plug in (`setUp()` at launch,
+`addMenuItems(to:)` in the menu). Everything else — `main.swift`, `Fleet.swift`, `Voice.swift`,
+`Brain.swift`, `Folder.swift`, `dashboard.html`, `orb.html` and the beacon — is the shared core.
+
+This repo is the master copy of the core. Citadel lives on the work GitHub and copies the core in
+with its own sync script; nothing goes the other way, so Citadel's work-only features stay there.
+Fix or add shared features here, then sync them into Citadel.
 
 ---
 
 ## Layout
 
+- `Edition.swift` — what makes this parent Nexus: name, teams watched, symbol, feature hooks
 - `main.swift` — menu bar, dashboard window, voice/orb wiring, per-app actions, refresh loop
 - `Fleet.swift` — discovery, heartbeat reading, status computation
 - `Folder.swift` — the menu-bar folder: mirrored app menus, commands to apps, folder settings

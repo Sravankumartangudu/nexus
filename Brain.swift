@@ -37,7 +37,7 @@ final class Brain {
 
     private static let dir: URL = {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Nexus", isDirectory: true)
+            .appendingPathComponent(Edition.name, isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
@@ -45,19 +45,22 @@ final class Brain {
     // MARK: Persona + live fleet state
 
     private static let persona = """
-    You are the voice of Nexus, the "head" of a small fleet of macOS apps (called agents) that the \
-    user builds and runs — Jarvis, OrgCS Pulse, Water Buddy, Animi, and others. Nexus \
+    You are the voice of \(Edition.name), the "head" of a small fleet of macOS apps (called agents) — \
+    \(Edition.fleetBlurb). \(Edition.name) \
     watches them all and can start, stop, restart or rebuild any of them.
 
     You are spoken aloud, so reply in one or two short, plain sentences. No markdown, no lists, no \
     emoji, no stage directions. Use each agent's real name.
 
     You can act on the fleet. To do something, put a directive on its own in your reply, for example:
-    [[do: open Jarvis]]  [[do: restart OrgCS Pulse]]  [[do: stop all]]  [[do: rebuild all]]  [[do: open all]]  [[do: open work]]  [[do: stop personal]]
+    [[do: open Jarvis]]  [[do: restart OrgCS Pulse]]  [[do: stop all]]  [[do: rebuild all]]  [[do: open all]]  [[do: open \(teamExample)]]
     The directive is executed and never spoken, so also say a short confirmation. Only act when the \
     user actually asks you to; for a plain question just answer from the fleet state you are given. \
-    The text after "do:" is a command for the fleet, so phrase it as a verb plus an agent name, "all", or a team name. Agents are grouped into teams by where their code is published: Work (the work GitHub), Personal (public GitHub), and Local (not on git yet).
+    The text after "do:" is a command for the fleet, so phrase it as a verb plus an agent name, "all", or a team name. Agents are grouped into teams by where their code is published: Work (the work GitHub), Personal (public GitHub), and Local (not on git yet). You only see this parent's teams.
     """
+
+    /// A team this parent actually watches, for the directive example.
+    private static var teamExample: String { Edition.watches(Team.work) ? "work" : "personal" }
 
     /// A compact, current description of every agent, refreshed into the system prompt on change.
     static func fleetSnapshot() -> String {
@@ -130,7 +133,7 @@ final class Brain {
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
         p.arguments = ["-lc",
                        #"export PATH="$HOME/.local/bin:$HOME/.devbar/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; exec claude "$@""#,
-                       "nexus"] + args
+                       Edition.name.lowercased()] + args
         p.currentDirectoryURL = Brain.dir
         var env = ProcessInfo.processInfo.environment.filter {
             !["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"].contains($0.key)
@@ -162,7 +165,7 @@ final class Brain {
                 guard let self, self.proc === dead else { return }
                 self.proc = nil; self.stdin = nil
                 if self.resumed && self.completedTurns == 0 {
-                    NSLog("Nexus: couldn't resume Claude session, starting fresh")
+                    NSLog("\(Edition.name): couldn't resume Claude session, starting fresh")
                     Settings.brainSessionId = nil
                     self.launch()
                     if self.turn != nil, let prompt = self.pendingPrompt { self.send(prompt) }
@@ -173,7 +176,7 @@ final class Brain {
             }
         }
 
-        do { try p.run() } catch { NSLog("Nexus: Claude launch failed: \(error)"); return }
+        do { try p.run() } catch { NSLog("\(Edition.name): Claude launch failed: \(error)"); return }
         proc = p
         stdin = inPipe.fileHandleForWriting
         completedTurns = 0

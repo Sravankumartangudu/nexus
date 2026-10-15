@@ -13,7 +13,7 @@ ARCHS="$(uname -m)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-SRC="main.swift Fleet.swift Voice.swift Brain.swift Folder.swift beacon/NexusBeacon.swift"
+SRC="Edition.swift main.swift Fleet.swift Voice.swift Brain.swift Folder.swift beacon/NexusBeacon.swift"
 BINS=()
 for arch in $ARCHS; do
   swiftc -O -target "$arch-apple-macos13.0" \
@@ -37,8 +37,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.stangudu.nexus</string>
   <key>CFBundleExecutable</key><string>Nexus</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.7.0</string>
-  <key>CFBundleVersion</key><string>6</string>
+  <key>CFBundleShortVersionString</key><string>1.8.0</string>
+  <key>CFBundleVersion</key><string>7</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>

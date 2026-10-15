@@ -1,4 +1,4 @@
-// Nexus — the fleet engine. Discovers every app in the home folder, reads their heartbeats,
+// Fleet — the engine shared by every parent app (Nexus and the work parent). Discovers every app in the home folder, reads their heartbeats,
 // inspects running processes, and computes a single health status per app.
 //
 // Discovery is automatic: any sibling folder that looks like one of these apps (a Swift app
@@ -284,7 +284,7 @@ final class Fleet {
     var onChange: (() -> Void)?
 
     private let home = NSHomeDirectory()
-    private let skip: Set<String> = ["Nexus", "Library", "Applications", "Desktop", "Documents",
+    private let skip: Set<String> = [Edition.name, "Library", "Applications", "Desktop", "Documents",
                                      "Downloads", "Movies", "Music", "Pictures", "Public", "Developer"]
 
     /// Rebuilds the list of apps from disk. Cheap enough to call on every refresh so new apps appear live.
@@ -304,7 +304,8 @@ final class Fleet {
             found[app.id] = app
         }
         for app in configApps() { found[app.id] = app }
-        apps = found.values.sorted { ($0.status, $0.name.lowercased()) < ($1.status, $1.name.lowercased()) }
+        // Each parent watches only its own teams (Nexus: personal; the work parent: work).
+        apps = found.values.filter { Edition.watches($0.team) }.sorted { ($0.status, $0.name.lowercased()) < ($1.status, $1.name.lowercased()) }
     }
 
     /// Reads heartbeats + running processes + build freshness for the current app list.

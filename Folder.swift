@@ -3,14 +3,14 @@
 // macOS won't let one app hold another's menu-bar item, so each app's NexusBeacon mirrors its own
 // menu to ~/.nexus/menus/<bundleid>.json and runs the items Nexus asks for through
 // ~/.nexus/inbox/<bundleid>/. Nexus shows that menu inside the app's submenu.
-// With "Keep Agents in Nexus" on (~/.nexus/folder.json) the apps hide their own items, except the
+// With "Keep Agents in Nexus" on (~/.nexus/folder.json; each parent has its own file) the apps hide their own items, except the
 // ones on the "shown" list. Whenever Nexus isn't running, every app shows its item again.
 
 import AppKit
 
 enum Folder {
     private static let home = URL(fileURLWithPath: NexusHome.root)
-    private static let configURL = home.appendingPathComponent("folder.json")
+    private static let configURL = home.appendingPathComponent(Edition.folderFile)
 
     private static var config: [String: Any] {
         get {

@@ -1,4 +1,4 @@
-// Nexus — the head of the fleet. A menu-bar app that watches every other app you've built
+// Nexus core — the head of the fleet. A menu-bar app that watches every other app you've built
 // (and any you build later), showing a live green/amber/red status for each, plus a full
 // dashboard window with per-app cards and controls (open, rebuild, stop, reveal).
 //
@@ -66,11 +66,11 @@ enum Settings {
         get {
             if let names = d.stringArray(forKey: "wakeNames")?.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
                !names.isEmpty { return names }
-            return ["Nexus"]
+            return [Edition.name]
         }
         set {
             let cleaned = newValue.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            d.set(cleaned.isEmpty || cleaned == ["Nexus"] ? nil : cleaned, forKey: "wakeNames")
+            d.set(cleaned.isEmpty || cleaned == [Edition.name] ? nil : cleaned, forKey: "wakeNames")
         }
     }
 
@@ -217,7 +217,7 @@ final class Dashboard: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable],
                          backing: .buffered, defer: false)
-        w.title = "Nexus"
+        w.title = Edition.name
         w.titleVisibility = .hidden            // keep a draggable titlebar, but no title text
         w.titlebarAppearsTransparent = true    // let the dark page show through for a seamless look
         // Matches the page's --bg0 in each look (dark / light), and follows the chosen appearance.
@@ -276,7 +276,7 @@ final class Dashboard: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             "running": Fleet.shared.runningCount,
             "worst": Fleet.shared.worst.hex,
         ]
-        let payload: [String: Any] = ["apps": apps, "summary": summary, "style": Settings.style,
+        let payload: [String: Any] = ["apps": apps, "summary": summary, "style": Settings.style, "parent": Edition.name,
                                       "teams": Fleet.shared.byTeam.map(\.team), "team": Settings.team]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -425,7 +425,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         }
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Nexus Settings"
+        w.title = "\(Edition.name) Settings"
         w.center()
         w.isReleasedWhenClosed = false
 
@@ -467,7 +467,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
         voiceCheck = vc; views.append(vc)
 
         views.append(label("Wake words", frame: NSRect(x: 24, y: 230, width: 392, height: 18), size: 12, bold: true))
-        let namesHint = label("Say any of these to get Nexus's attention. Add your own — press return after each.",
+        let namesHint = label("Say any of these to get \(Edition.name)'s attention. Add your own — press return after each.",
                               frame: NSRect(x: 24, y: 212, width: 392, height: 16), size: 11, bold: false)
         namesHint.textColor = .secondaryLabelColor
         views.append(namesHint)
@@ -491,12 +491,12 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
 
         // --- Launch at login -------------------------------------------------
         views.append(separator(y: 92))
-        let login = NSButton(checkboxWithTitle: "  Launch Nexus at login",
+        let login = NSButton(checkboxWithTitle: "  Launch \(Edition.name) at login",
                              target: self, action: #selector(toggleLogin(_:)))
         login.frame = NSRect(x: 24, y: 58, width: 392, height: 22)
         loginCheck = login; views.append(login)
 
-        let loginNote = label("Nexus wakes the other agents on command, so only Nexus needs a login item.",
+        let loginNote = label("\(Edition.name) wakes the other agents on command, so only \(Edition.name) needs a login item.",
                               frame: NSRect(x: 44, y: 36, width: 372, height: 16), size: 11, bold: false)
         loginNote.textColor = .tertiaryLabelColor
         views.append(loginNote)
@@ -544,7 +544,7 @@ final class SettingsWindow: NSObject, NSTokenFieldDelegate {
     @objc private func toggleLogin(_ sender: NSButton) {
         let svc = SMAppService.mainApp
         do { svc.status == .enabled ? try svc.unregister() : try svc.register() }
-        catch { NSLog("Nexus: launch at login: \(error)") }
+        catch { NSLog("\(Edition.name): launch at login: \(error)") }
         sender.state = (svc.status == .enabled) ? .on : .off
     }
 
@@ -616,14 +616,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.tick() }
 
-        // Start Nexus's own beacon so it shows up in its own board.
-        NexusBeacon.start(name: "Nexus") { ("ok", "watching \(Fleet.shared.apps.count) apps") }
+        // Start the parent's own heartbeat, so tools (and the other parent) can see it's up.
+        NexusBeacon.start(name: Edition.name) { ("ok", "watching \(Fleet.shared.apps.count) apps") }
 
         // Nexus is the fleet's wake-up switch: if voice is on, it listens for its name.
         if Settings.voiceEnabled { voice.start() }
         if Settings.showOrb { orb.show(); orb.setState(Settings.voiceEnabled ? "idle" : "off") }
         pushFleetToOrb()
 
+        Edition.setUp()
         if CommandLine.arguments.contains("--dashboard") { dashboard.show() }
     }
 
@@ -654,8 +655,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func updateIcon() {
         let worst = Fleet.shared.worst
-        if let img = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted",
-                             accessibilityDescription: "Nexus") {
+        if let img = NSImage(systemSymbolName: Edition.symbol, accessibilityDescription: Edition.name) {
             img.isTemplate = false
             item.button?.image = img.withSymbolColor(worst.nsColor)
             item.button?.title = ""
@@ -664,7 +664,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.button?.title = worst.dot
         }
         let n = Fleet.shared.apps.count
-        var tip = "Nexus — \(Fleet.shared.runningCount)/\(n) running"
+        var tip = "\(Edition.name) — \(Fleet.shared.runningCount)/\(n) running"
         if Settings.voiceEnabled {
             switch voiceState {
             case "listening": tip += " · listening…"
@@ -684,7 +684,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appMenus = []
         menu.removeAllItems()
         let n = Fleet.shared.apps.count
-        let header = NSMenuItem(title: "Nexus — \(Fleet.shared.runningCount)/\(n) apps running", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "\(Edition.name) — \(Fleet.shared.runningCount)/\(n) apps running", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
@@ -715,7 +715,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         add(menu, "Open Dashboard…", #selector(openDashboard))
         // The apps hide their own menu-bar items and live in the submenus above.
-        add(menu, "Keep Agents in Nexus", #selector(toggleFolder)).state = Folder.enabled ? .on : .off
+        add(menu, "Keep Agents in \(Edition.name)", #selector(toggleFolder)).state = Folder.enabled ? .on : .off
 
         // Dashboard Style ▸ — radio list of the available visualisations.
         let styleItem = NSMenuItem(title: "Dashboard Style", action: nil, keyEquivalent: "")
@@ -788,12 +788,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(sizeItem)
 
         // Launch at login — because Nexus wakes the other agents on command, only it needs this.
-        let login = add(menu, "Launch Nexus at Login", #selector(toggleLogin))
+        let login = add(menu, "Launch \(Edition.name) at Login", #selector(toggleLogin))
         login.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
 
+        Edition.addMenuItems(to: menu)
         add(menu, "Settings…", #selector(openSettings))
         menu.addItem(.separator())
-        add(menu, "Quit Nexus", #selector(quit))
+        add(menu, "Quit \(Edition.name)", #selector(quit))
     }
 
     private func fillSubmenu(_ sub: NSMenu, for app: AppInfo) {
@@ -896,7 +897,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func toggleLogin() {
         let svc = SMAppService.mainApp
         do { svc.status == .enabled ? try svc.unregister() : try svc.register() }
-        catch { NSLog("Nexus: launch at login: \(error)") }
+        catch { NSLog("\(Edition.name): launch at login: \(error)") }
     }
 
     static let orbStyles = [("reactor", "Arc Reactor"), ("pulse", "Pulse"), ("waveform", "Waveform"),
@@ -953,7 +954,7 @@ if CommandLine.arguments.contains("--probe") {
     NexusHome.ensure()
     Fleet.shared.discover()
     Fleet.shared.refresh()
-    print("Nexus — \(Fleet.shared.runningCount)/\(Fleet.shared.apps.count) running\n")
+    print("\(Edition.name) — \(Fleet.shared.runningCount)/\(Fleet.shared.apps.count) running\n")
     for group in Fleet.shared.byTeam {
         print("\(group.team.uppercased())")
         for a in group.apps {

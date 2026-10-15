@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 — 2026-10-15
+
+- **Nexus is now the personal parent.** It watches apps on public GitHub, apps not on git yet, and
+  any other non-work host. Work apps (on the work GitHub) moved to **Citadel**, a new work parent
+  built from this same core. Answer "Nexus" or "Citadel" to talk to either; both can run at once.
+- **One core, two parents.** A new `Edition.swift` holds what makes a parent itself (name, wake
+  word, bundle id, folder file, menu-bar symbol, teams watched, feature hooks). The rest is shared,
+  and this repo is its master copy. The dashboard, menus, Settings, voice and brain all take their
+  name from it.
+- The beacon names its parent in two constants (`nexusId`, `folderFile`), so a work app can live in
+  Citadel's menu-bar folder instead. Personal apps need no change.
+
 ## 1.7.0 — 2026-10-15
 
 - **🎨 Appearance: System / Light / Dark.** Pick it in the menu (🎨 Appearance) or in Settings.

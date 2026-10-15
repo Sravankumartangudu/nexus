@@ -391,7 +391,7 @@
 <body>
   <header>
     <div class="mark"><b></b><b></b><b></b></div>
-    <div><h1>Nexus</h1><div class="sub" id="summary">Booting…</div></div>
+    <div><h1 id="parentName">Nexus</h1><div class="sub" id="summary">Booting…</div></div>
     <div class="spacer"></div>
     <select id="teamSel" title="Team — set by where each app's repo is published"></select>
     <select id="styleSel" title="Dashboard style"></select>
@@ -461,7 +461,7 @@ const Office = {
         <div class="glow"></div>
         <div class="rack"><div class="face lt"></div><div class="face rt"></div><div class="top"></div>
           <div class="leds"><i></i><i></i><i></i><i></i></div></div>
-        <div class="label">NEXUS</div>
+        <div class="label">${esc(PARENT.toUpperCase())}</div>
       </div>`;
     stage.appendChild(this.world);
     this.floor = this.world.querySelector("#floor");
@@ -584,7 +584,7 @@ setInterval(()=>{
 }, 420);
 
 /* ====================================================================== */
-/*  OPERATIONS CENTER (flagship) — agents wired to a central Nexus core   */
+/*  OPERATIONS CENTER (flagship) — agents wired to the parent's central core */
 /* ====================================================================== */
 const Opcenter = {
   spatial:true, world:null, floor:null, svg:null, core:null, pods:{}, apps:[], angle:0, layout:null,
@@ -597,7 +597,7 @@ const Opcenter = {
     this.world.appendChild(this.svg);
     this.core=elt("div","node"); this.core.id="opcore";
     this.core.innerHTML=`<div class="halo h3"></div><div class="halo h2"></div><div class="halo h1"></div>
-      <div class="dais"></div><div class="column"></div><div class="orb"></div><div class="label">NEXUS</div>`;
+      <div class="dais"></div><div class="column"></div><div class="orb"></div><div class="label">${esc(PARENT.toUpperCase())}</div>`;
     this.world.appendChild(this.core);
     stage.appendChild(this.world);
     this.floor=this.world.querySelector("#opfloor");
@@ -735,7 +735,7 @@ const Constellation = {
     this.svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); this.svg.id="sky-lines";
     this.svg.setAttribute("width","1"); this.svg.setAttribute("height","1"); this.svg.style.overflow="visible";
     this.world.appendChild(this.svg);
-    const sun=elt("div","sun node"); sun.innerHTML=`<div class="orb"></div><div class="lbl">NEXUS</div>`; this.world.appendChild(sun);
+    const sun=elt("div","sun node"); sun.innerHTML=`<div class="orb"></div><div class="lbl">${esc(PARENT.toUpperCase())}</div>`; this.world.appendChild(sun);
     stage.appendChild(this.world); },
   teardown(){ this.world?.remove(); this.world=null; this.nodes={}; },
   bounds(){ const R=this.radius(this.apps.length); return {min:{x:-R-1,y:-R-1},max:{x:R+1,y:R+2}}; },
@@ -804,7 +804,7 @@ const Terminal = {
   spatial:false, root:null, apps:[], t:0,
   mount(){ this.root=elt("div","flat"); this.root.id="term";
     this.root.innerHTML=`<div class="term-win"><div class="term-bar"><i class="tb1"></i><i class="tb2"></i><i class="tb3"></i>
-      <span class="tt">nexus — watch -n5 nexus status</span></div><div class="term-body"></div></div>`;
+      <span class="tt">${esc(PARENT.toLowerCase())} — watch -n5 ${esc(PARENT.toLowerCase())} status</span></div><div class="term-body"></div></div>`;
     stage.appendChild(this.root); },
   teardown(){ this.root?.remove(); this.root=null; },
   spark(key){ const chars="▁▂▃▄▅▆▇"; const base={running:5,ok:5,warn:4,building:6,needsBuild:3,stale:1,error:6,crashed:0,idle:2,notBuilt:0}[key]??3;
@@ -813,14 +813,15 @@ const Terminal = {
   render(){ const apps=this.apps; const body=this.root?.querySelector(".term-body"); if(!body) return;
     const pad=(s,n)=>{ s=String(s); return s.length>=n?s.slice(0,n):s+" ".repeat(n-s.length); };
     const run=apps.filter(a=>["running","ok","stale","warn"].includes(a.key)).length;
-    let out=`<span class="d">nexus@fleet</span> <span class="b">~</span> % nexus status\n`;
+    const cmd=esc(PARENT.toLowerCase());
+    let out=`<span class="d">${cmd}@fleet</span> <span class="b">~</span> % ${cmd} status\n`;
     out+=`<span class="d">${run} of ${apps.length} agents on duty · ${new Date().toLocaleTimeString()}</span>\n\n`;
     out+=`<span class="d">${pad("AGENT",16)}${pad("STATUS",16)}${pad("VER",9)}ACTIVITY</span>\n`;
     apps.forEach(a=>{ const c=this.cls(a.key); const dot=a.key==="running"||a.key==="ok"?"●":a.key==="crashed"||a.key==="error"?"✖":a.key==="idle"||a.key==="notBuilt"?"○":"◐";
       out+=`<span class="${c}">${dot}</span> ${pad(esc(a.name),14)}<span class="${c}">${pad(esc(a.status),16)}</span><span class="d">${pad("v"+esc(a.version),9)}</span><span class="${c}">${this.spark(a.key)}</span>\n`;
       if(a.detail) out+=`  <span class="d">↳ ${esc(a.detail)}</span>\n`;
     });
-    out+=`\n<span class="d">nexus@fleet</span> <span class="b">~</span> % <span class="cursor"></span>`;
+    out+=`\n<span class="d">${cmd}@fleet</span> <span class="b">~</span> % <span class="cursor"></span>`;
     body.innerHTML=out;
   },
   update(payload){ this.apps=payload.apps||[]; this.render(); },
@@ -857,8 +858,19 @@ const Grid = {
 const VIEWS = { opcenter:Opcenter, office:Office, city:City, constellation:Constellation, noc:Noc, terminal:Terminal, grid:Grid };
 let active=null, activeName=null, lastPayload=null;
 
+/* which parent app this is (Nexus, or the work parent on the same core) — names the core everywhere */
+let PARENT="Nexus";
+function setParent(name){
+  if(!name || name===PARENT) return;
+  PARENT=name;
+  document.title=`${name} — Mission Control`;
+  document.getElementById("parentName").textContent=name;
+  if(active){ active.teardown(); activeName=null; }   // remount so the core's label is redrawn
+}
+
 function render(payload){
   lastPayload = payload;
+  setParent(payload.parent);
   updateTeams(payload);
   payload = teamView(payload);
   const name = VIEWS[payload.style] ? payload.style : "opcenter";
@@ -884,12 +896,12 @@ function updateChrome(name){
   const sel=document.getElementById("styleSel"); sel.value=name;
   const spatial = active && active.spatial;
   document.getElementById("resetBtn").style.display = spatial ? "" : "none";
-  const hints={ opcenter:"Command centre — agents orbit the Nexus core, beams carry commands & telemetry · drag to orbit · scroll to zoom · ⇧-drag to pan · click a pod",
+  const hints={ opcenter:`Command centre — agents orbit the ${PARENT} core, beams carry commands & telemetry · drag to orbit · scroll to zoom · ⇧-drag to pan · click a pod`,
     office:"Click a cubicle for controls · drag to orbit · scroll to zoom · ⇧-drag to pan",
     city:"Each tower is an app — taller & brighter means busier · drag to orbit · scroll to zoom",
-    constellation:"Agents orbit the Nexus core · drag to orbit · scroll to zoom · click a planet",
+    constellation:`Agents orbit the ${PARENT} core · drag to orbit · scroll to zoom · click a planet`,
     noc:"Live control-room wall · click a panel for controls",
-    terminal:"Live `nexus status` feed · click a style above to change the view",
+    terminal:`Live “${PARENT.toLowerCase()} status” feed · click a style above to change the view`,
     grid:"Clean status board · click a card for controls" };
   document.getElementById("hint").textContent = hints[name]||"";
 }

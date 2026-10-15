@@ -66,7 +66,9 @@ enum NexusBeacon {
     private static weak var item: NSStatusItem?
     private static var inboxWatch: DispatchSourceFileSystemObject?
     private static var appsWatch: NSKeyValueObservation?
+    // The parent app this app lives under, and that parent's folder settings in ~/.nexus.
     private static let nexusId = "com.stangudu.nexus"
+    private static let folderFile = "folder.json"
     private static var menuFile: URL { home.appendingPathComponent("menus/\(id).json") }
     private static var inbox: URL { home.appendingPathComponent("inbox/\(id)") }
 
@@ -99,7 +101,7 @@ enum NexusBeacon {
     /// this app isn't on its "keep in menu bar" list.
     private static func applyFolder() {
         guard let item else { return }
-        let cfg = (try? Data(contentsOf: home.appendingPathComponent("folder.json")))
+        let cfg = (try? Data(contentsOf: home.appendingPathComponent(folderFile)))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
         let on = cfg["enabled"] as? Bool ?? false
         let shown = cfg["shown"] as? [String] ?? []

@@ -14,7 +14,7 @@ import Speech
 
 // Lightweight voice tracing, on only when NEXUS_VOICE_DEBUG is set in the environment.
 let voiceDebug = ProcessInfo.processInfo.environment["NEXUS_VOICE_DEBUG"] != nil
-@inline(__always) func vlog(_ s: @autoclosure () -> String) { if voiceDebug { NSLog("Nexus/voice: " + s()) } }
+@inline(__always) func vlog(_ s: @autoclosure () -> String) { if voiceDebug { NSLog("\(Edition.name)/voice: " + s()) } }
 
 // MARK: - "Sounds like" helpers (trimmed from Jarvis's People)
 
@@ -172,7 +172,7 @@ final class Ears {
             DispatchQueue.main.async { self?.onLevel?(rms) }
         }
         engine.prepare()
-        do { try engine.start() } catch { NSLog("Nexus: audio engine failed: \(error)"); return }
+        do { try engine.start() } catch { NSLog("\(Edition.name): audio engine failed: \(error)"); return }
         running = true
         vlog("start: engine running")
         beginTask(.none)
@@ -524,7 +524,7 @@ final class Voice: NSObject {
             guard ok else {
                 self.mode = "off"
                 self.onCaption?("Allow Microphone and Speech Recognition in System Settings → Privacy & Security.")
-                NSLog("Nexus: voice needs microphone + speech permission")
+                NSLog("\(Edition.name): voice needs microphone + speech permission")
                 return
             }
             self.ears.start()
@@ -602,7 +602,7 @@ final class Voice: NSObject {
                 }
             case .failure(let error):
                 let msg = error.localizedDescription
-                NSLog("Nexus: brain failed: \(msg)")
+                NSLog("\(Edition.name): brain failed: \(msg)")
                 self.mode = "speaking"
                 let line = "Sorry, I couldn't work that out."
                 self.onCaption?(line); self.mouth.say(line)
