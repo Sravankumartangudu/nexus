@@ -4,7 +4,7 @@
 built — and every one you build in the future — showing a live green/amber/red health status for each, plus a
 full dashboard window, voice control, and a floating voice orb.
 
-Nexus is the parent of the personal family: Animi, Water Buddy, WheatWise, T-Minus, and whatever
+Nexus is the parent of the personal family: Animi, Water Buddy, Dharalu (was WheatWise), T-Minus, and whatever
 comes next. It owns no app's logic; it just keeps an eye on all of them — and, on a spoken command,
 wakes, opens, stops, or rebuilds any of them for you.
 

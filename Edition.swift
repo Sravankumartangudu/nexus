@@ -17,7 +17,7 @@ enum Edition {
     /// Menu-bar symbol, tinted by the fleet's worst status.
     static let symbol = "point.3.connected.trianglepath.dotted"
     /// One line for the voice brain: whose apps these are and a few of them by name.
-    static let fleetBlurb = "the user's personal apps — Water Buddy, Animi, WheatWise, T-Minus, and others"
+    static let fleetBlurb = "the user's personal apps — Water Buddy, Animi, Dharalu, T-Minus, and others"
 
     /// The voice orb's palette and look (orb.html `THEMES`): cyan for Nexus.
     static let orbTheme = "nexus"

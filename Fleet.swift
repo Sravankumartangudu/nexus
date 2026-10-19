@@ -297,7 +297,7 @@ final class Fleet {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: dir, isDirectory: &isDir), isDir.boolValue else { continue }
             // Some apps keep their build.sh and .app one level down: app/ (Log Doctor, beside its
-            // engine) or mac/ (WheatWise, beside its agent and web dashboard).
+            // engine) or mac/ (Dharalu, beside its agent and web dashboard).
             guard let app = inspect(dir: dir, folder: entry)
                     ?? ["app", "mac"].lazy.compactMap({ self.inspect(dir: (dir as NSString).appendingPathComponent($0), folder: entry) }).first
                     else { continue }
