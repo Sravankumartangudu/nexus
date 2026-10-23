@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.1 — 2026-10-23
+
+- **WheatWise is now Dharalu.** The voice brain names it by its new name when it talks about the
+  personal fleet.
+
 ## 1.10.0 — 2026-10-15
 
 - **Each parent's orb looks its own.** The voice orb now carries its parent's name underneath and its
