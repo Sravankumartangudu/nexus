@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.0 — 2026-10-24
+
+- **Other apps can see the fleet.** Nexus now keeps a small summary at
+  `~/.nexus/fleet/nexus.json` (each parent writes its own: Citadel's is `citadel.json`): every app's
+  id, name and status, plus a short reason when it crashed, stopped responding or reported a
+  problem. Written only when something changes. [Notchfall](https://github.com/Sravankumartangudu/notchfall)
+  1.5 reads it to drop *"Water Buddy quit unexpectedly"* out of the notch, with **Relaunch**.
+
 ## 1.10.1 — 2026-10-23
 
 - **WheatWise is now Dharalu.** The voice brain names it by its new name when it talks about the

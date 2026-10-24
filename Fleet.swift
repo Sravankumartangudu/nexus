@@ -318,7 +318,32 @@ final class Fleet {
             app.needsBuild = computeNeedsBuild(app)
         }
         apps.sort { ($0.status, $0.name.lowercased()) < ($1.status, $1.name.lowercased()) }
+        export()
         onChange?()
+    }
+
+    /// A small summary for other apps on this Mac (Notchfall's 🛰 fleet alerts read it):
+    /// ~/.nexus/fleet/<parent>.json, {"apps": [{id, name, status, detail}]}. Only rewritten when it
+    /// changes, so details that tick ("last seen 3m ago") are left out.
+    private var exported: Data?
+    private func export() {
+        let list = apps.sorted { $0.id < $1.id }.map { a -> [String: String] in
+            let s = a.status
+            let detail: String = switch s {
+            case .crashed: "It stopped without quitting."
+            case .stale: "It's running but hasn't checked in."
+            case .error, .warn: a.detail
+            default: ""
+            }
+            return ["id": a.id, "name": a.name, "status": s.key, "detail": detail]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: ["apps": list], options: [.sortedKeys]),
+              data != exported else { return }
+        let dir = URL(fileURLWithPath: home).appendingPathComponent(".nexus/fleet")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if (try? data.write(to: dir.appendingPathComponent("\(Edition.name.lowercased()).json"), options: .atomic)) != nil {
+            exported = data
+        }
     }
 
     func app(_ id: String) -> AppInfo? { apps.first { $0.id == id } }

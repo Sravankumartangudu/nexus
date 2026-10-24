@@ -264,6 +264,7 @@ Everything goes through files under `~/.nexus/`:
 | `menus/<bundleid>.json` | the app | its menu: entries `{i, t, e, s, k}` (index, title, enabled, checked, submenu) or `{i, sep: true}` |
 | `inbox/<bundleid>/*.json` | Nexus | commands: `{"cmd":"dump"}` (write the menu), `{"cmd":"folder"}` (re-read folder.json), `{"cmd":"perform","path":[…],"title":"…"}` (run an item) |
 | `folder.json` | Nexus | `{"enabled": bool, "shown": [bundleids]}` (Citadel keeps its own, `citadel-folder.json`) |
+| `fleet/nexus.json` | Nexus | a summary for other apps: `{"apps": [{"id", "name", "status", "detail"}]}`, status one of `error`, `crashed`, `stale` (not responding), `warn`, `needsBuild`, `building`, `running`, `idle`, `notBuilt`. Rewritten only when it changes. Citadel writes `fleet/citadel.json`. [Notchfall](https://github.com/Sravankumartangudu/notchfall) reads it for its 🛰 fleet alerts. |
 
 The app hides its item only while the folder is on, its parent is running, and the app isn't on the
 `shown` list. Which parent an app lives under is set by two constants at the top of its copy of
