@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nexus — Style per App</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg0:#070a12; --bg1:#0e1322; --text:#e7ebf3; --dim:#8b93a7; --line:#262c3d; --line-h:#39415a; --blue:#4a9eff;
+    --card1:#121a2c; --card2:#0d1320; --chip:rgba(27,32,48,.75); --on-blue:#fff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg0:#eceff6; --bg1:#f6f8fc; --text:#1a2033; --dim:#4d566c; --line:#d2d9e6; --line-h:#a9b3c9; --blue:#2169d6;
+      --card1:#ffffff; --card2:#f3f6fb; --chip:rgba(255,255,255,.78); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 38px 26px 26px; background: var(--bg0); color: var(--text);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-user-select: none; user-select: none; }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
+  .lead { margin: 0 0 18px; color: var(--dim); max-width: 560px; }
+  .app { background: linear-gradient(var(--card1), var(--card2)); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px 14px; margin-bottom: 10px; }
+  .app h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+  .app h2 small { color: var(--dim); font-weight: 400; font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--chip); color: var(--text); border-radius: 999px;
+    padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .chip:hover { border-color: var(--line-h); }
+  .chip.on { background: var(--blue); border-color: var(--blue); color: var(--on-blue); font-weight: 600; }
+  .empty { color: var(--dim); background: var(--bg1); border: 1px dashed var(--line); border-radius: 12px; padding: 18px; }
+</style>
+</head>
+<body>
+<h1>🎨 Style per app</h1>
+<p class="lead">The design each app wears. It’s the same pick as the Style in the app’s own Settings: change it in
+  either place and the other shows it within a few seconds.</p>
+<div id="apps"></div>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const send = (id, style) => window.webkit.messageHandlers.nexus.postMessage({ action: "style", id, style });
+function render({ apps }) {
+  const box = document.getElementById("apps");
+  if (!apps.length) {
+    box.innerHTML = `<div class="empty">No app has styles yet. An app shows here once it has them and has been opened once
+      (Idea Forge, Dharalu, Water Buddy and Stratus have a 🎨 Style setting).</div>`;
+    return;
+  }
+  box.innerHTML = apps.map(a => {
+    const on = (a.styles || []).find(s => s.id === a.style);
+    return `<div class="app"><h2>${esc(a.app)}<small>${esc(on ? on.name : "")}</small></h2><div class="chips">${
+      (a.styles || []).map(s => `<button class="chip ${a.style === s.id ? "on" : ""}" title="${esc(s.blurb)}"
+        data-id="${esc(a.id)}" data-style="${esc(s.id)}">${esc(s.name)}</button>`).join("")}</div></div>`;
+  }).join("");
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".chip");
+  if (b) send(b.dataset.id, b.dataset.style);
+});
+</script>
+</body>
+</html>

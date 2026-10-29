@@ -97,6 +97,10 @@ a visualisation from the menu-bar **Dashboard Style** submenu or the in-window p
 Spatial views share one orbit camera: **drag** to orbit, **wheel** to zoom, **⇧-drag / right-drag**
 to pan, and **Reset view** to recenter.
 
+**🎨 Style per App…** (menu) picks the design each personal app wears: 14 styles from Standard to
+Skeuomorphic, Glassmorphism, Neo-brutalism, Retro and Cyber, each with a light and a dark look. It's
+the same pick as the Style in each app's own Settings, and the two stay in sync.
+
 **🎨 Appearance** (menu or Settings) switches the app between **System**, **Light** and **Dark**
 at once; System follows macOS. The voice orb looks the same in every mode.
 

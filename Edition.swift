@@ -29,7 +29,12 @@ enum Edition {
     static func setUp() {}
 
     /// Adds this edition's own items to the menu-bar menu, just above Settings….
-    static func addMenuItems(to menu: NSMenu) {}
+    static func addMenuItems(to menu: NSMenu) {
+        // 🎨 Style per App: the design each personal app wears (StylesWindow, Nexus only).
+        let styles = NSMenuItem(title: "🎨 Style per App…", action: #selector(StylesWindow.show), keyEquivalent: "")
+        styles.target = StylesWindow.shared
+        menu.addItem(styles)
+    }
 
     /// The Claude model for the voice brain, given the app's own setting.
     static func brainModel(_ own: String) -> String { own }

@@ -13,7 +13,7 @@ ARCHS="$(uname -m)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-SRC="Edition.swift main.swift Fleet.swift Voice.swift Brain.swift Folder.swift beacon/NexusBeacon.swift"
+SRC="Edition.swift StylesWindow.swift styles/FleetStyles.swift main.swift Fleet.swift Voice.swift Brain.swift Folder.swift beacon/NexusBeacon.swift"
 BINS=()
 for arch in $ARCHS; do
   swiftc -O -target "$arch-apple-macos13.0" \
@@ -25,7 +25,7 @@ done
 lipo -create "${BINS[@]}" -output "$APP/Contents/MacOS/Nexus"
 rm "${BINS[@]}"
 
-cp dashboard.html orb.html "$APP/Contents/Resources/"
+cp dashboard.html orb.html styles.html "$APP/Contents/Resources/"
 cp Icon/AppIcon.icns "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,8 +37,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.stangudu.nexus</string>
   <key>CFBundleExecutable</key><string>Nexus</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.11.0</string>
-  <key>CFBundleVersion</key><string>13</string>
+  <key>CFBundleShortVersionString</key><string>1.12.0</string>
+  <key>CFBundleVersion</key><string>14</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>

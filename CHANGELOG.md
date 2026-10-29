@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.12.0 — 2026-10-29
+
+- **🎨 Style per App…** (menu) picks the design each personal app wears: one of 14 styles
+  (Standard, Skeuomorphic, Flat, Material, Neumorphic, Glassmorphism, Liquid Glass, Claymorphism,
+  Neo-brutalism, Swiss minimal, Bento grid, Retro, Aurora, Cyber), each with a light and a dark look.
+  It's the same pick as the Style in each app's own Settings: change it in either place and the other
+  shows it within a few seconds. Idea Forge, Dharalu, Water Buddy and Stratus have it; an app shows in
+  the window once it has been opened.
+- The picks live in `~/.nexus/styles.json`. The shared kit is in `styles/`, and
+  `scripts/sync-styles.sh` copies it into each app (`--check` reports any app that is out of date).
+
 ## 1.11.0 — 2026-10-24
 
 - **Other apps can see the fleet.** Nexus now keeps a small summary at
