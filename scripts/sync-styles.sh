@@ -21,9 +21,10 @@ set -euo pipefail
 mode=""; [ "${1:-}" = "--check" ] && mode="--check"
 cd "$(dirname "$0")/.."
 SWIFT_APPS="../IdeaForge ../Dharalu/mac"
-NODE_APPS="../WaterBuddy ../Stratus"
+NODE_APPS="../WaterBuddy ../Stratus ../Aamodam"
 PAGES="../IdeaForge/board.html ../Dharalu/docs/style.css ../WaterBuddy/renderer/settings.html ../WaterBuddy/renderer/settings.js
-       ../Stratus/renderer/css/styles.css ../Stratus/renderer/js/core/fleet-styles.js"
+       ../Stratus/renderer/css/styles.css ../Stratus/renderer/js/core/fleet-styles.js
+       ../Aamodam/renderer/css/styles.css ../Aamodam/renderer/js/core/fleet-styles.js"
 
 differ=0
 copy() {   # copy <master> <dir>
