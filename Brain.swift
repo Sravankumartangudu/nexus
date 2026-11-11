@@ -164,13 +164,7 @@ final class Brain {
             DispatchQueue.main.async {
                 guard let self, self.proc === dead else { return }
                 self.proc = nil; self.stdin = nil
-                if self.resumed && self.completedTurns == 0 {
-                    NSLog("\(Edition.name): couldn't resume Claude session, starting fresh")
-                    Settings.brainSessionId = nil
-                    self.launch()
-                    if self.turn != nil, let prompt = self.pendingPrompt { self.send(prompt) }
-                    return
-                }
+                if self.resumed && self.completedTurns == 0 { self.startFresh(); return }
                 let err = self.stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.finish(.failure(Failure(message: err.isEmpty ? "Claude exited (\(dead.terminationStatus))." : err)))
             }
@@ -199,6 +193,13 @@ final class Brain {
         }
     }
 
+    private func startFresh() {
+        NSLog("\(Edition.name): couldn't resume Claude session, starting fresh")
+        Settings.brainSessionId = nil
+        launch()
+        if turn != nil, let prompt = pendingPrompt { send(prompt) }
+    }
+
     private func handle(_ event: [String: Any]) {
         if let id = event["session_id"] as? String, !id.isEmpty { Settings.brainSessionId = id }
         switch event["type"] as? String {
@@ -209,6 +210,13 @@ final class Brain {
                 if let text = b["text"] as? String, !text.isEmpty { turn?.onText(text) }
             }
         case "result":
+            // A saved session Claude no longer has ("No conversation found") ends in an error result with
+            // no turns run, before the process exits: start a fresh session and ask again.
+            if resumed && completedTurns == 0 && event["is_error"] as? Bool == true
+                && (event["num_turns"] as? Int ?? 0) == 0 {
+                let dead = proc; proc = nil; stdin = nil; dead?.terminate()
+                startFresh(); return
+            }
             completedTurns += 1
             Edition.brainTurnDone(event)
             if event["is_error"] as? Bool == true {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.1 — 2026-11-11
+
+- **Voice no longer gets stuck on a lost Claude session.** When the saved voice session no longer exists
+  ("No conversation found"), Claude now answers with an error before it quits, so Nexus never noticed and every
+  question failed until the session was reset. Nexus now starts a fresh session and asks the question again.
+
 ## 1.12.0 — 2026-10-29
 
 - **🎨 Style per App…** (menu) picks the design each personal app wears: one of 14 styles
